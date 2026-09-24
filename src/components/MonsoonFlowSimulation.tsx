@@ -510,10 +510,12 @@ export default function MonsoonFlowSimulation() {
               {activeSeason.badge}
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            North Indian Ocean Seasonal Circulation Engine
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm">
+            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+              North Indian Ocean Seasonal Circulation Engine
+            </span>
           </h2>
-          <p className="text-xs sm:text-sm text-white/60 max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-sky-100/90 font-medium max-w-2xl leading-relaxed">
             {activeSeason.description}
           </p>
         </div>

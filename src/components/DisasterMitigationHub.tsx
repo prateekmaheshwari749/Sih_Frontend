@@ -93,13 +93,15 @@ export default function DisasterMitigationHub() {
             <span className="text-cyan-300 font-semibold">MINISTRY OF EARTH SCIENCES (MoES)</span>
           </div>
 
-          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-            Subsurface Thermal Core &amp; Cyclone Early Warning Hub
+          <h2 className="text-3xl sm:text-4xl font-black tracking-tight drop-shadow-sm">
+            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+              Subsurface Thermal Core &amp; Cyclone Early Warning Hub
+            </span>
           </h2>
 
-          <p className="text-white/70 text-sm sm:text-base leading-relaxed">
+          <p className="text-sky-100/90 font-medium text-sm sm:text-base leading-relaxed">
             Tropical cyclones do not feed on surface water alone. When satellites detect a warm surface,
-            the hidden disaster variable is <strong className="text-amber-300 font-semibold">Ocean Heat Content (0–300m)</strong>.
+            the hidden disaster variable is <strong className="text-cyan-200 font-bold">Ocean Heat Content (0–300m)</strong>.
             OCEANINTEL reconstructs this subsurface fuel to eliminate sudden forecast surprises for IMD &amp; NDMA.
           </p>
         </div>

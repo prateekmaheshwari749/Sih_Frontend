@@ -54,14 +54,16 @@ export default function CycloneCockpitSimulator({ scenario, activeWaypoint }: Pr
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-black text-white text-base tracking-tight">
-                IMD Multi-Hazard Atmospheric Cockpit &amp; Wave-Tank
+              <h3 className="font-black text-base tracking-tight">
+                <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                  IMD Multi-Hazard Atmospheric Cockpit &amp; Wave-Tank
+                </span>
               </h3>
               <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-mono font-bold">
                 REAL-TIME TELEMETRY
               </span>
             </div>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-sky-100/90 font-medium">
               Coupled physical indicators: Anemometer wind force · Microbarograph pressure drop · Coastal storm surge wave simulator
             </p>
           </div>

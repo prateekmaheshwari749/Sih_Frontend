@@ -12,6 +12,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { sendChat } from '../api/oceanApi';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface ChatMessage {
   id: string;
@@ -24,7 +25,7 @@ const INITIAL_MESSAGE: ChatMessage = {
   id: 'init-0',
   role: 'assistant',
   content:
-    "👋 Hello! I'm **X AI**, your North Indian Ocean digital twin copilot.\n\nAsk me about **0–1000m subsurface temperatures**, **SST & SSS anomalies**, **cyclone storm surge alerts**, or our **satellite-to-subsurface deep neural network**.",
+    "👋 Hello! I'm **X AI**, your North Indian Ocean digital twin copilot.\n\nAsk me about **subsurface temperatures**, **SST & SSS**, **cyclone-related ocean information**, **model architecture**, **ARGO validation**, or **model performance**.",
   timestamp: new Date(),
 };
 
@@ -33,44 +34,38 @@ const SUGGESTIONS = [
   'What is current SST in Bay of Bengal?',
   'Explain Mixed Layer Depth (MLD)',
   'Is there any active cyclone warning?',
-  'How does the 15-layer MLP work?',
+  'How does the 15-layer neural model work?',
 ];
 
-// Fallback intelligent answers if backend is offline/starting up
-function getFallbackReply(query: string): string {
-  const q = query.toLowerCase();
-  if (q.includes('cyclone') || q.includes('storm') || q.includes('alert')) {
-    return '🌀 **Cyclone Intelligence Report**\n\nCurrent monitoring indicates seasonal depression tracking in the South-Central Bay of Bengal. Subsurface Ocean Heat Content (OHC) remains elevated at ~82 kJ/cm², providing thermal fuel for convective intensification. NDMA alert status is currently at **Advisory Level 2**.';
+// Backend-only response handling.
+// IMPORTANT: No synthetic/fabricated ocean values are generated here.
+function getBackendErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return `⚠️ **X AI Backend Unavailable**\n\n${error.message}\n\nPlease make sure the OceanEmbed backend is running and try again.`;
   }
-  if (q.includes('sst') || q.includes('surface') || q.includes('temperature')) {
-    return '🌡️ **Sea Surface Temperature (SST)**\n\nMean SST across the North Indian Ocean ranges between **28.4°C and 30.1°C** for the current cycle. Moderate positive thermal anomalies (+0.8°C) are observed off the Andhra-Odisha coast, driven by weak monsoon wind shear.';
-  }
-  if (q.includes('mld') || q.includes('mixed layer') || q.includes('thermocline')) {
-    return '🌊 **Vertical Stratification & MLD**\n\nThe Mixed Layer Depth (MLD) is estimated at **32 to 45 meters** across the Arabian Sea and Bay of Bengal. Below 50m, the main thermocline begins, where temperatures drop steeply from 28°C to 14°C at 200m depth.';
-  }
-  if (q.includes('model') || q.includes('mlp') || q.includes('tensor') || q.includes('architecture')) {
-    return '🔬 **Deep Neural Architecture**\n\nOur system uses a **Fused Multi-Scale representation** (61-D latent vector) combining Swin Transformer windowed spatial tokens with CNN eddy features. A 15-head vertical MLP maps surface SST, SSS, and SSH directly to 15 discrete depth layers (0–1000m) with 0.38°C RMSE.';
-  }
-  if (q.includes('profile') || q.includes('depth') || q.includes('1000m')) {
-    return '📊 **0–1000m Subsurface Thermal Profile**\n\n• **Surface (0m)**: 29.2°C\n• **Mixed Layer (30m)**: 28.6°C\n• **Thermocline (100m)**: 21.4°C\n• **Subsurface (200m)**: 14.8°C\n• **Intermediate (500m)**: 9.3°C\n• **Abyssal (1000m)**: 6.1°C\n\nProfile reconstructed via satellite embeddings calibrated against ARGO float observations.';
-  }
-  return `🤖 **Ocean Digital Twin Response**\n\nReconstruction across the North Indian Ocean (0–1000m) is active. Satellite observations (MODIS SST, SMAP SSS, Jason SSH) are assimilated daily into our deep learning digital twin.\n\n*(Query: "${query}" logged for real-time inference)*`;
+
+  return (
+    '⚠️ **X AI Backend Unavailable**\n\n' +
+    'The production XAI service could not be reached.\n\n' +
+    'Please make sure the OceanEmbed backend is running and try again.'
+  );
 }
 
-// Markdown formatting helper
+// Markdown formatting helper with clean light theme contrast
 function formatMarkdown(text: string) {
   return text.split('\n').map((line, i) => {
     const parts = line.split(/\*\*(.*?)\*\*/g);
+
     return (
       <span key={i} className="block min-h-[1.2em]">
         {parts.map((part, j) =>
           j % 2 === 1 ? (
-            <strong key={j} className="text-cyan-300 font-bold">
+            <strong key={j} className="text-[#005088] font-bold">
               {part}
             </strong>
           ) : (
             part
-          )
+          ),
         )}
       </span>
     );
@@ -79,6 +74,8 @@ function formatMarkdown(text: string) {
 
 export default function XAIFloatingPopup() {
   const navigate = useNavigate();
+  const { language } = useTheme();
+
   const [isOpen, setIsOpen] = useState(false);
   const [showGreeting, setShowGreeting] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -86,9 +83,14 @@ export default function XAIFloatingPopup() {
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // Proactive greeting pop-up: shows 1.5s after load, disappears after 14s if untouched
+  // Keep language consumed so existing ThemeContext behavior remains intact.
+  void language;
+
+  // Proactive greeting pop-up:
+  // shows 1.5s after load, disappears after 15s if untouched.
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!hasInteracted) {
@@ -138,7 +140,10 @@ export default function XAIFloatingPopup() {
 
   const handleSendMessage = async (textToSend: string) => {
     const clean = textToSend.trim();
-    if (!clean || isTyping) return;
+
+    if (!clean || isTyping) {
+      return;
+    }
 
     setHasInteracted(true);
     setShowGreeting(false);
@@ -155,30 +160,35 @@ export default function XAIFloatingPopup() {
     setIsTyping(true);
 
     try {
-      // Attempt production backend POST /chat
+      // Production backend:
+      // POST /chat
       const res = await sendChat(clean);
-      const reply = (res as any)?.reply || (res as any)?.message || (res as any)?.answer;
 
-      if (reply && typeof reply === 'string') {
-        const assistantMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: reply,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, assistantMsg]);
-        return;
+      const reply =
+        typeof res?.reply === 'string'
+          ? res.reply.trim()
+          : '';
+
+      if (!reply) {
+        throw new Error('The XAI backend returned an empty reply.');
       }
-      throw new Error('No reply payload');
-    } catch {
-      // Graceful offline/loading fallback intelligent response
-      const fallbackReply = getFallbackReply(clean);
+
       const assistantMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: `${Date.now()}-assistant`,
         role: 'assistant',
-        content: fallbackReply,
+        content: reply,
         timestamp: new Date(),
       };
+
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (error) {
+      const assistantMsg: ChatMessage = {
+        id: `${Date.now()}-error`,
+        role: 'assistant',
+        content: getBackendErrorMessage(error),
+        timestamp: new Date(),
+      };
+
       setMessages(prev => [...prev, assistantMsg]);
     } finally {
       setIsTyping(false);
@@ -186,7 +196,12 @@ export default function XAIFloatingPopup() {
   };
 
   const handleClearChat = () => {
-    setMessages([INITIAL_MESSAGE]);
+    setMessages([
+      {
+        ...INITIAL_MESSAGE,
+        timestamp: new Date(),
+      },
+    ]);
   };
 
   const handleOpenFullPage = () => {
@@ -195,36 +210,47 @@ export default function XAIFloatingPopup() {
   };
 
   return (
-    <aside aria-label="X AI Floating Assistant" className="fixed bottom-6 right-4 sm:right-6 z-50 select-none">
+    <aside
+      aria-label="X AI Floating Assistant"
+      className="fixed bottom-6 right-4 sm:right-6 z-50 select-none"
+    >
       {/* ──────────────────────────────────────────────────────────
-          1. PROACTIVE WELCOME POPUP BUBBLE (Appears on site open)
+          1. PROACTIVE WELCOME POPUP BUBBLE
       ────────────────────────────────────────────────────────── */}
       {showGreeting && !isOpen && (
-        <div className="absolute bottom-16 right-0 w-[300px] sm:w-[340px] p-4 rounded-2xl bg-[#020d1c]/95 border border-cyan-400/40 shadow-2xl backdrop-blur-xl text-left animate-in fade-in slide-in-from-bottom-3 duration-300 z-50">
+        <div className="absolute bottom-16 right-0 w-[300px] sm:w-[340px] p-4 rounded-2xl bg-white border border-slate-200 shadow-2xl text-left animate-in fade-in slide-in-from-bottom-3 duration-300 z-50">
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md">
-                <Sparkles className="w-3.5 h-3.5" />
+              <div className="w-7 h-7 rounded-lg bg-[#005088] flex items-center justify-center text-white shadow-sm">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               </div>
+
               <div>
-                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                   <span>X AI Ocean Copilot</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
                 </div>
-                <div className="text-[10px] text-cyan-300/70 font-mono">Digital Twin Assistant</div>
+
+                <div className="text-[10px] text-slate-500 font-mono">
+                  Digital Twin Assistant
+                </div>
               </div>
             </div>
+
             <button
               onClick={() => setShowGreeting(false)}
-              className="text-white/40 hover:text-white p-1 rounded-md transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-slate-700 p-1 rounded-md transition-colors cursor-pointer"
               title="Dismiss"
+              type="button"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <p className="text-xs text-white/80 leading-relaxed mb-3">
-            👋 <strong>Hi there!</strong> I'm X AI, your oceanographic digital twin assistant. Need help inspecting 0–1000m thermal profiles, SST maps, or cyclone alerts?
+          <p className="text-xs text-slate-600 leading-relaxed mb-3">
+            👋 <strong>Hi there!</strong> I'm X AI, your oceanographic digital
+            twin assistant. Ask about subsurface profiles, SST, model
+            performance, validation, or other available ocean information.
           </p>
 
           <div className="flex items-center gap-2">
@@ -234,14 +260,17 @@ export default function XAIFloatingPopup() {
                 setShowGreeting(false);
                 setHasInteracted(true);
               }}
-              className="btn-3d flex-1 py-1.5 px-3 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+              className="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold text-white bg-[#005088] hover:bg-[#003d66] flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-colors"
+              type="button"
             >
               <MessageSquare className="w-3 h-3" />
               <span>Ask a Question</span>
             </button>
+
             <button
               onClick={() => setShowGreeting(false)}
-              className="py-1.5 px-2.5 rounded-lg text-xs font-medium text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="py-1.5 px-2.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200"
+              type="button"
             >
               Later
             </button>
@@ -257,31 +286,39 @@ export default function XAIFloatingPopup() {
           className="
             absolute bottom-0 right-0
             w-[92vw] sm:w-[410px] h-[550px] max-h-[85vh]
-            rounded-3xl border border-cyan-500/40
-            bg-[#020a16]/95 backdrop-blur-2xl
-            shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_35px_rgba(6,182,212,0.25)]
+            rounded-2xl border border-slate-300
+            bg-white
+            shadow-[0_20px_60px_rgba(0,0,0,0.18),0_0_20px_rgba(0,80,136,0.12)]
             flex flex-col overflow-hidden
             animate-in fade-in zoom-in-95 duration-200
             z-50
           "
         >
           {/* Top Bar Header */}
-          <div className="p-4 border-b border-white/10 bg-gradient-to-r from-cyan-950/60 via-[#031526]/80 to-blue-950/60 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="p-3.5 bg-[#005088] text-white flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-2.5">
               <div className="relative">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg">
-                  <Bot className="w-5 h-5" />
+                <div className="w-8 h-8 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center text-white">
+                  <Bot className="w-4.5 h-4.5" />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#020a16]" />
+
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-[#005088]" />
               </div>
+
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-sm font-bold text-white tracking-tight">X AI Copilot</h3>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  <h3 className="text-sm font-bold text-white tracking-tight">
+                    X AI Copilot
+                  </h3>
+
+                  <span className="text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold bg-amber-400 text-slate-950">
                     LIVE
                   </span>
                 </div>
-                <p className="text-[10px] text-white/50 font-mono">0–1000m Subsurface Intelligence</p>
+
+                <p className="text-[10px] text-blue-100 font-mono">
+                  0–1000m Subsurface Intelligence
+                </p>
               </div>
             </div>
 
@@ -290,21 +327,26 @@ export default function XAIFloatingPopup() {
               <button
                 onClick={handleClearChat}
                 title="Clear Conversation"
-                className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                className="p-1.5 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                type="button"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+
               <button
                 onClick={handleOpenFullPage}
                 title="Expand to Full Page"
-                className="p-1.5 rounded-lg text-white/50 hover:text-cyan-400 hover:bg-white/10 transition-all cursor-pointer"
+                className="p-1.5 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                type="button"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
+
               <button
                 onClick={() => setIsOpen(false)}
                 title="Minimize / Close"
-                className="p-1.5 rounded-lg text-white/50 hover:text-red-400 hover:bg-white/10 transition-all cursor-pointer"
+                className="p-1.5 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                type="button"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -312,37 +354,49 @@ export default function XAIFloatingPopup() {
           </div>
 
           {/* Chat Messages Body */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-3.5 scrollbar-thin scrollbar-thumb-cyan-900 scrollbar-track-transparent">
+          <div className="flex-1 p-3.5 overflow-y-auto space-y-3 bg-[#f8fafc] scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
             {messages.map(msg => (
               <div
                 key={msg.id}
-                className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-2.5 ${
+                  msg.role === 'user'
+                    ? 'justify-end'
+                    : 'justify-start'
+                }`}
               >
                 {msg.role === 'assistant' && (
-                  <div className="w-7 h-7 rounded-lg bg-cyan-900/50 border border-cyan-500/30 flex items-center justify-center text-cyan-300 flex-shrink-0 mt-0.5">
+                  <div className="w-7 h-7 rounded-lg bg-[#005088] flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-xs">
                     <Waves className="w-3.5 h-3.5" />
                   </div>
                 )}
 
                 <div
-                  className={`max-w-[82%] p-3 rounded-2xl text-xs leading-relaxed ${
+                  className={`max-w-[84%] p-3 rounded-xl text-xs leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-br-none shadow-md shadow-cyan-950/50'
-                      : 'bg-white/[0.04] border border-white/10 text-white/85 rounded-bl-none shadow-sm'
+                      ? 'bg-[#005088] text-white rounded-br-none shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-xs'
                   }`}
                 >
-                  <div className="break-words space-y-1">{formatMarkdown(msg.content)}</div>
+                  <div className="break-words space-y-1">
+                    {formatMarkdown(msg.content)}
+                  </div>
+
                   <div
                     className={`text-[9px] mt-1 font-mono ${
-                      msg.role === 'user' ? 'text-white/60 text-right' : 'text-white/40 text-left'
+                      msg.role === 'user'
+                        ? 'text-blue-200 text-right'
+                        : 'text-slate-400 text-left'
                     }`}
                   >
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {msg.timestamp.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </div>
                 </div>
 
                 {msg.role === 'user' && (
-                  <div className="w-7 h-7 rounded-lg bg-blue-600/40 border border-blue-500/30 flex items-center justify-center text-blue-200 flex-shrink-0 mt-0.5">
+                  <div className="w-7 h-7 rounded-lg bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-xs">
                     <User className="w-3.5 h-3.5" />
                   </div>
                 )}
@@ -350,23 +404,29 @@ export default function XAIFloatingPopup() {
             ))}
 
             {isTyping && (
-              <div className="flex items-center gap-2 text-cyan-400 text-xs pl-9">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce" />
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.2s]" />
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce [animation-delay:0.4s]" />
-                <span className="text-[11px] text-white/40 font-mono ml-1">Analyzing ocean layers...</span>
+              <div className="flex items-center gap-2 text-[#005088] text-xs pl-9">
+                <span className="w-2 h-2 rounded-full bg-[#005088] animate-bounce" />
+                <span className="w-2 h-2 rounded-full bg-[#005088] animate-bounce [animation-delay:0.2s]" />
+                <span className="w-2 h-2 rounded-full bg-[#005088] animate-bounce [animation-delay:0.4s]" />
+
+                <span className="text-[11px] text-slate-500 font-mono ml-1">
+                  Analyzing ocean layers...
+                </span>
               </div>
             )}
+
             <div ref={chatBottomRef} />
           </div>
 
           {/* Quick Suggestion Chips */}
-          <div className="px-3 py-2 border-t border-white/5 bg-black/30 overflow-x-auto scrollbar-none flex gap-1.5">
+          <div className="px-3 py-2 border-t border-slate-200 bg-slate-100/90 overflow-x-auto scrollbar-none flex gap-1.5">
             {SUGGESTIONS.map(s => (
               <button
                 key={s}
                 onClick={() => handleSendMessage(s)}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] bg-white/5 hover:bg-cyan-950/60 border border-white/10 hover:border-cyan-500/40 text-white/70 hover:text-cyan-300 transition-all cursor-pointer shrink-0"
+                className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10.5px] font-medium bg-white hover:bg-[#005088] border border-slate-300 hover:border-[#005088] text-slate-700 hover:text-white transition-all cursor-pointer shrink-0 shadow-2xs"
+                type="button"
+                disabled={isTyping}
               >
                 {s}
               </button>
@@ -377,30 +437,32 @@ export default function XAIFloatingPopup() {
           <form
             onSubmit={e => {
               e.preventDefault();
-              handleSendMessage(input);
+              void handleSendMessage(input);
             }}
-            className="p-3 border-t border-white/10 bg-black/40 flex items-center gap-2"
+            className="p-2.5 border-t border-slate-200 bg-white flex items-center gap-2"
           >
             <input
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder="Ask X AI about ocean depths, SST, cyclones..."
-              className="flex-1 bg-white/5 border border-white/10 focus:border-cyan-400 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none transition-all"
+              className="flex-1 bg-slate-50 border border-slate-300 focus:border-[#005088] focus:bg-white rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition-all shadow-inner"
+              disabled={isTyping}
             />
+
             <button
               type="submit"
               disabled={!input.trim() || isTyping}
-              className="btn-3d w-9 h-9 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed shadow-md transition-all shrink-0"
+              className="w-8.5 h-8.5 rounded-lg bg-[#005088] hover:bg-[#003d66] text-white flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors shrink-0"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5" />
             </button>
           </form>
         </div>
       )}
 
       {/* ──────────────────────────────────────────────────────────
-          3. PERSISTENT FLOATING LAUNCHER BUTTON (Bottom-Right)
+          3. PERSISTENT FLOATING LAUNCHER BUTTON
       ────────────────────────────────────────────────────────── */}
       {!isOpen && (
         <button
@@ -410,29 +472,33 @@ export default function XAIFloatingPopup() {
             setHasInteracted(true);
           }}
           className="
-            btn-3d group relative flex items-center gap-2.5 px-4 py-3 rounded-2xl
-            bg-gradient-to-r from-[#04243b]/95 via-[#031d30]/95 to-[#021324]/95
-            border border-cyan-400/50 shadow-[0_0_25px_rgba(6,182,212,0.4)]
-            text-white cursor-pointer hover:border-cyan-300 transition-all
+            group relative flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl
+            bg-[#005088] hover:bg-[#003d66]
+            border border-[#003d66] shadow-lg
+            text-white cursor-pointer transition-all
           "
           aria-label="Open X AI Ocean Copilot"
+          type="button"
         >
           {/* Pulsing beacon glow */}
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
           </span>
 
-          <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md group-hover:rotate-12 transition-transform">
-            <Bot className="w-4 h-4" />
+          <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
+            <Bot className="w-3.5 h-3.5" />
           </div>
 
           <div className="flex flex-col text-left">
             <span className="text-xs font-bold text-white tracking-tight flex items-center gap-1">
-              <span>X AI</span>
-              <Sparkles className="w-3 h-3 text-cyan-300 animate-pulse" />
+              <span>X AI Copilot</span>
+              <Sparkles className="w-3 h-3 text-amber-300" />
             </span>
-            <span className="text-[9px] text-cyan-300/80 font-mono">Ocean Copilot</span>
+
+            <span className="text-[9px] text-blue-200 font-mono">
+              Ocean Intelligence
+            </span>
           </div>
         </button>
       )}

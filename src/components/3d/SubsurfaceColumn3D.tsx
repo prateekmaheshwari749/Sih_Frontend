@@ -1,14 +1,26 @@
-import { useRef, useState, useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 
-const DEPTH_LEVELS = [0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 1000];
+export interface ProfilePoint {
+  depth: number;
+  temperature: number;
+  uncertainty?: number;
+}
 
-// Depth profile metadata
+interface SubsurfaceColumn3DProps {
+  profile?: ProfilePoint[];
+  latitude?: number;
+  longitude?: number;
+  date?: string;
+  selectedDepth?: number | null;
+  onSelectDepth?: (depth: number | null) => void;
+}
+
 interface DepthInfo {
   depth: number;
-  temp: number; // °C
+  temp: number; // °C climatology fallback
   salinity: number; // PSU
   pressure: number; // dbar
   zone: string;
@@ -16,7 +28,9 @@ interface DepthInfo {
   desc: string;
 }
 
-const DEPTH_DATA: Record<number, DepthInfo> = {
+export const DEPTH_LEVELS = [0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 1000];
+
+export const DEPTH_DATA: Record<number, DepthInfo> = {
   0: { depth: 0, temp: 29.8, salinity: 34.2, pressure: 0, zone: 'Sea Surface (Epipelagic)', color: '#ef4444', desc: 'Direct satellite infrared SST observation' },
   5: { depth: 5, temp: 29.7, salinity: 34.3, pressure: 5, zone: 'Near-surface Layer', color: '#f87171', desc: 'Solar heating absorption zone' },
   10: { depth: 10, temp: 29.5, salinity: 34.4, pressure: 10, zone: 'Upper Mixed Layer', color: '#fb923c', desc: 'Wind stress turbulence mixing' },
@@ -34,93 +48,139 @@ const DEPTH_DATA: Record<number, DepthInfo> = {
   1000: { depth: 1000, temp: 4.8, salinity: 34.7, pressure: 1000, zone: 'Bathypelagic (Abyss)', color: '#4338ca', desc: 'Centuries-old deep abyssal water' },
 };
 
-// Map depth to Y coordinate: 0m -> +1.8, 1000m -> -1.8
+// Stratified spacing: each level receives 0.35 units of vertical space (total span 4.9 units)
+// This guarantees zero vertical overlap between any two consecutive depth layers.
+const DEPTH_INDEX_MAP: Record<number, number> = {
+  0: 0,
+  5: 1,
+  10: 2,
+  20: 3,
+  30: 4,
+  50: 5,
+  75: 6,
+  100: 7,
+  125: 8,
+  150: 9,
+  200: 10,
+  300: 11,
+  500: 12,
+  700: 13,
+  1000: 14,
+};
+
 function depthToY(depth: number): number {
-  return 1.8 - (depth / 1000) * 3.6;
+  const idx = DEPTH_INDEX_MAP[depth];
+  if (idx !== undefined) {
+    return 2.45 - idx * 0.35;
+  }
+  return 2.45 - (depth / 1000) * 4.9;
 }
 
 export default function SubsurfaceColumn3D({
+  profile,
+  selectedDepth,
   onSelectDepth,
-}: {
-  onSelectDepth?: (depth: number | null) => void;
-}) {
-  const [hoveredDepth, setHoveredDepth] = useState<number | null>(100);
+}: SubsurfaceColumn3DProps) {
+  const [internalHovered, setInternalHovered] = useState<number | null>(100);
+  const activeDepth = selectedDepth !== undefined && selectedDepth !== null ? selectedDepth : internalHovered;
+
   const floatRef = useRef<THREE.Group>(null);
   const surfaceWaveRef = useRef<THREE.Mesh>(null);
+
+  // Sync internal hover when selectedDepth changes externally
+  useEffect(() => {
+    if (selectedDepth !== undefined && selectedDepth !== null) {
+      setInternalHovered(selectedDepth);
+    }
+  }, [selectedDepth]);
+
+  // Compute temperatures mapping from backend profile or fallback
+  const temperatures = useMemo(() => {
+    const map = new Map<number, number>();
+    if (profile && profile.length > 0) {
+      profile.forEach(p => {
+        if (Number.isFinite(p.temperature)) {
+          map.set(p.depth, p.temperature);
+        }
+      });
+    }
+    return map;
+  }, [profile]);
 
   // Animate surface waves and drifting ARGO CTD float
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
 
-    // Surface wave displacement
+    // Gentle surface wave displacement
     if (surfaceWaveRef.current) {
       surfaceWaveRef.current.rotation.z = Math.sin(t * 0.8) * 0.02;
     }
 
     // ARGO profiling float ascending & descending cycle
     if (floatRef.current) {
-      // Periodic cycle: ~24s full cycle between 0m (y=1.8) and 1000m (y=-1.8)
-      const cycle = (Math.sin(t * 0.26) + 1) / 2; // 0 to 1
-      const y = -1.8 + cycle * 3.6;
+      const cycle = (Math.sin(t * 0.22) + 1) / 2; // 0 to 1
+      const y = -2.45 + cycle * 4.9; // traverses the full 1000m to 0m column
       floatRef.current.position.y = y;
       floatRef.current.rotation.y += 0.015;
     }
   });
 
   return (
-    <group rotation={[0.15, -0.35, 0]}>
+    <group rotation={[0.12, -0.32, 0]}>
       {/* ── Top Sea Surface Wave Mesh ── */}
-      <group position={[0, 1.95, 0]}>
+      <group position={[0, 2.62, 0]}>
         <mesh ref={surfaceWaveRef} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[3.6, 2.6, 24, 24]} />
+          <planeGeometry args={[3.8, 2.8, 24, 24]} />
           <meshStandardMaterial
-            color="#0ea5e9"
+            color="#0284c7"
             roughness={0.1}
             metalness={0.8}
             transparent
             opacity={0.65}
-            wireframe={false}
           />
         </mesh>
 
         {/* Sea Surface Wireframe Grid */}
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-          <planeGeometry args={[3.6, 2.6, 12, 8]} />
-          <meshBasicMaterial color="#38bdf8" wireframe transparent opacity={0.25} />
+          <planeGeometry args={[3.8, 2.8, 12, 8]} />
+          <meshBasicMaterial color="#38bdf8" wireframe transparent opacity={0.3} />
         </mesh>
       </group>
 
       {/* ── Depth Column Backbone Guide Rails ── */}
-      {[-1.8, 1.8].map((x) =>
-        [-1.3, 1.3].map((z) => (
+      {[-1.85, 1.85].map((x) =>
+        [-1.35, 1.35].map((z) => (
           <mesh key={`${x}-${z}`} position={[x, 0, z]}>
-            <cylinderGeometry args={[0.008, 0.008, 3.8, 8]} />
-            <meshBasicMaterial color="#06b6d4" transparent opacity={0.15} />
+            <cylinderGeometry args={[0.008, 0.008, 5.2, 8]} />
+            <meshBasicMaterial color="#06b6d4" transparent opacity={0.2} />
           </mesh>
         ))
       )}
 
-      {/* ── 15 Depth Level Slabs ── */}
+      {/* ── 15 Stratified Depth Level Slabs ── */}
       {DEPTH_LEVELS.map((depth, idx) => {
         const info = DEPTH_DATA[depth];
         const y = depthToY(depth);
-        const isHovered = hoveredDepth === depth;
-        const dz = idx < DEPTH_LEVELS.length - 1 ? DEPTH_LEVELS[idx + 1] - depth : 50;
-        const slabThickness = Math.max(0.04, Math.min((dz / 1000) * 3.6 * 0.75, 0.22));
+        const isActive = activeDepth === depth;
+        const currentTemp = temperatures.get(depth) ?? info.temp;
+        const slabThickness = isActive ? 0.12 : 0.07;
+
+        // Alternating slight Z stagger so depth badges never crowd
+        const badgeZ = idx % 2 === 0 ? 0.35 : -0.35;
 
         return (
           <group key={depth} position={[0, y, 0]}>
-            {/* Slab mesh */}
+            {/* Slab Mesh */}
             <mesh
-              scale={isHovered ? [1.06, 1.25, 1.06] : [1, 1, 1]}
+              scale={isActive ? [1.05, 1.2, 1.05] : [1, 1, 1]}
               onClick={(e) => {
                 e.stopPropagation();
-                setHoveredDepth(depth);
+                setInternalHovered(depth);
                 onSelectDepth?.(depth);
               }}
               onPointerOver={(e) => {
                 e.stopPropagation();
-                setHoveredDepth(depth);
+                setInternalHovered(depth);
                 onSelectDepth?.(depth);
                 document.body.style.cursor = 'pointer';
               }}
@@ -131,88 +191,95 @@ export default function SubsurfaceColumn3D({
               <boxGeometry args={[3.4, slabThickness, 2.4]} />
               <meshStandardMaterial
                 color={info.color}
-                roughness={0.2}
+                roughness={0.25}
                 metalness={0.4}
                 transparent
-                opacity={isHovered ? 0.75 : 0.32}
+                opacity={isActive ? 0.85 : 0.42}
                 emissive={info.color}
-                emissiveIntensity={isHovered ? 0.6 : 0.15}
+                emissiveIntensity={isActive ? 0.7 : 0.18}
               />
             </mesh>
 
             {/* Glowing boundary line */}
-            <mesh scale={isHovered ? [1.07, 1, 1.07] : [1.01, 1, 1.01]}>
+            <mesh scale={isActive ? [1.06, 1, 1.06] : [1.01, 1, 1.01]}>
               <boxGeometry args={[3.42, slabThickness + 0.01, 2.42]} />
               <meshBasicMaterial
                 color={info.color}
                 wireframe
                 transparent
-                opacity={isHovered ? 0.9 : 0.2}
+                opacity={isActive ? 0.95 : 0.3}
               />
             </mesh>
 
-            {/* Depth tag on the right side */}
-            <Html distanceFactor={5.5} position={[2.1, 0, 0]} center>
+            {/* Thin connector line to the badge */}
+            <line>
+              <bufferGeometry>
+                <bufferAttribute
+                  attach="attributes-position"
+                  args={[new Float32Array([1.7, 0, badgeZ, 2.05, 0, badgeZ]), 3]}
+                />
+              </bufferGeometry>
+              <lineBasicMaterial
+                color={info.color}
+                transparent
+                opacity={isActive ? 0.9 : 0.45}
+                linewidth={1}
+              />
+            </line>
+
+            {/* Interactive Depth & Temperature Badge */}
+            <Html distanceFactor={5.6} position={[2.15, 0, badgeZ]} center>
               <button
-                onClick={() => {
-                  setHoveredDepth(depth);
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInternalHovered(depth);
                   onSelectDepth?.(depth);
                 }}
-                className="px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all whitespace-nowrap cursor-pointer"
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer whitespace-nowrap border ${
+                  isActive
+                    ? 'ring-2 ring-white/90 scale-110 z-30 font-black shadow-lg shadow-cyan-500/50'
+                    : 'hover:scale-105 opacity-85 hover:opacity-100 hover:border-white/60'
+                }`}
                 style={{
-                  background: isHovered ? info.color : 'rgba(2, 12, 24, 0.75)',
-                  color: isHovered ? '#000' : info.color,
-                  border: `1px solid ${info.color}66`,
-                  boxShadow: isHovered ? `0 0 14px ${info.color}` : 'none',
+                  background: isActive ? info.color : 'rgba(2, 14, 28, 0.92)',
+                  color: isActive ? '#000000' : '#ffffff',
+                  borderColor: info.color,
+                  boxShadow: isActive ? `0 0 16px ${info.color}` : '0 2px 6px rgba(0,0,0,0.6)',
                 }}
               >
-                {depth}m
+                <span className="font-bold" style={{ color: isActive ? '#000' : info.color }}>
+                  {depth}m
+                </span>
+                <span className={isActive ? 'text-black/50' : 'text-white/40'}>·</span>
+                <span className="font-extrabold tracking-tight">
+                  {currentTemp.toFixed(1)}°C
+                </span>
               </button>
             </Html>
 
-            {/* Detailed hover card for active slab */}
-            {isHovered && (
-              <Html distanceFactor={5.5} position={[-2.4, 0, 0]} center>
+            {/* Compact hover/active details tooltip on the left side */}
+            {isActive && (
+              <Html distanceFactor={5.6} position={[-2.35, 0, 0]} center>
                 <div
-                  className="p-3.5 rounded-xl text-left pointer-events-auto backdrop-blur-md whitespace-nowrap shadow-2xl"
+                  className="px-3 py-2 rounded-xl text-left pointer-events-none backdrop-blur-md whitespace-nowrap shadow-2xl border"
                   style={{
-                    background: 'rgba(2, 15, 30, 0.92)',
-                    border: `1px solid ${info.color}`,
-                    boxShadow: `0 0 25px ${info.color}44`,
+                    background: 'rgba(2, 15, 30, 0.94)',
+                    borderColor: info.color,
+                    boxShadow: `0 0 20px ${info.color}44`,
                     color: '#e2e8f0',
                     fontSize: '11px',
-                    minWidth: '230px',
                   }}
                 >
-                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
-                    <span className="font-mono font-bold text-sm" style={{ color: info.color }}>
-                      Depth {depth} m
+                  <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-1 mb-1 font-mono">
+                    <span className="font-bold text-xs" style={{ color: info.color }}>
+                      {depth} m · {currentTemp.toFixed(2)}°C
                     </span>
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/10 text-white/80 font-mono">
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/10 text-white/80">
                       {info.pressure} dbar
                     </span>
                   </div>
-
-                  <p className="text-[10px] text-white/70 mb-2 font-medium">{info.zone}</p>
-
-                  <div className="grid grid-cols-2 gap-2 font-mono text-[10px] mb-2">
-                    <div className="bg-black/30 p-1.5 rounded border border-white/5">
-                      <span className="text-white/40 block text-[9px]">TEMPERATURE</span>
-                      <span className="text-base font-black" style={{ color: info.color }}>
-                        {info.temp.toFixed(1)}°C
-                      </span>
-                    </div>
-                    <div className="bg-black/30 p-1.5 rounded border border-white/5">
-                      <span className="text-white/40 block text-[9px]">SALINITY</span>
-                      <span className="text-base font-black text-cyan-300">
-                        {info.salinity.toFixed(1)} PSU
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-[9px] text-white/50 border-t border-white/10 pt-1.5 italic">
-                    {info.desc}
-                  </p>
+                  <p className="text-[10px] text-white/70 font-medium">{info.zone}</p>
                 </div>
               </Html>
             )}
@@ -223,13 +290,13 @@ export default function SubsurfaceColumn3D({
       {/* ── Thermocline Barrier Plane (at 100m) ── */}
       <group position={[0, depthToY(100), 0]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[3.8, 2.8]} />
-          <meshBasicMaterial color="#eab308" transparent opacity={0.06} side={THREE.DoubleSide} />
+          <planeGeometry args={[4.0, 3.0]} />
+          <meshBasicMaterial color="#eab308" transparent opacity={0.07} side={THREE.DoubleSide} />
         </mesh>
       </group>
 
-      {/* ── Autonomous Robotic ARGO CTD Profiling Float ── */}
-      <group ref={floatRef} position={[0, 0, 0]}>
+      {/* ── Autonomous Robotic ARGO CTD Profiling Float (Drifting on the left side) ── */}
+      <group ref={floatRef} position={[-1.25, 0, 0.6]}>
         {/* Float body cylinder */}
         <mesh castShadow>
           <cylinderGeometry args={[0.07, 0.07, 0.35, 16]} />
@@ -255,7 +322,7 @@ export default function SubsurfaceColumn3D({
         </mesh>
 
         {/* Float Label */}
-        <Html distanceFactor={5.5} position={[0, -0.32, 0]} center>
+        <Html distanceFactor={5.6} position={[0, -0.32, 0]} center>
           <div className="px-2 py-0.5 rounded bg-amber-500/90 text-black font-black text-[9px] whitespace-nowrap shadow-lg">
             ARGO PROFILER (0–1000m)
           </div>
@@ -278,12 +345,12 @@ function VolumetricCurrentParticles() {
     const cols = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 3.2;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 3.6;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 2.2;
+      pos[i * 3] = (Math.random() - 0.5) * 3.4;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * 4.9;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 2.4;
 
       // Color from warm surface (y > 0) to cold deep (y < 0)
-      const normY = (pos[i * 3 + 1] + 1.8) / 3.6; // 0 to 1
+      const normY = (pos[i * 3 + 1] + 2.45) / 4.9; // 0 to 1
       cols[i * 3] = THREE.MathUtils.lerp(0.1, 0.95, normY);
       cols[i * 3 + 1] = THREE.MathUtils.lerp(0.4, 0.6, normY);
       cols[i * 3 + 2] = THREE.MathUtils.lerp(0.95, 0.2, normY);
@@ -300,9 +367,9 @@ function VolumetricCurrentParticles() {
     for (let i = 0; i < count; i++) {
       // Gentle eddy swirl
       array[i * 3] += Math.sin(array[i * 3 + 1] * 2 + delta) * 0.003;
-      array[i * 3 + 1] -= delta * 0.12; // slow downward current
-      if (array[i * 3 + 1] < -1.8) {
-        array[i * 3 + 1] = 1.8;
+      array[i * 3 + 1] -= delta * 0.14; // slow downward current
+      if (array[i * 3 + 1] < -2.45) {
+        array[i * 3 + 1] = 2.45;
       }
     }
     posAttr.needsUpdate = true;

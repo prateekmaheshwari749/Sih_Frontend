@@ -1,411 +1,966 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Shield, Bell, Send, CheckCheck, Clock, AlertTriangle,
-  Users, FileText, RefreshCw, CheckCircle2,
+  Shield,
+  Bell,
+  FileText,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Activity,
+  Server,
+  Database,
+  Calendar,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import PageLayout, { PageContainer, PageHeader } from '../components/PageLayout';
-import { useData, type Alert } from '../contexts/DataContext';
-import { useAuth } from '../contexts/AuthContext';
-const RECIPIENTS = [
-  { id: 'ndma',   label: 'NDMA Headquarters',      email: 'ops@ndma.gov.in',         tier: 'national' },
-  { id: 'imd',    label: 'IMD New Delhi',           email: 'director@imd.gov.in',     tier: 'national' },
-  { id: 'imdche', label: 'IMD Chennai',             email: 'cyclone@imdchennai.gov',  tier: 'regional' },
-  { id: 'navy',   label: 'Naval Command (Eastern)', email: 'ops@indiannavy.nic.in',   tier: 'national' },
-  { id: 'coast',  label: 'Indian Coast Guard',      email: 'ops@indiancoastguard.gov', tier: 'national' },
-  { id: 'tn',     label: 'Tamil Nadu SDMA',         email: 'sdma@tn.gov.in',          tier: 'state' },
-  { id: 'ap',     label: 'Andhra Pradesh SDMA',     email: 'sdma@ap.gov.in',          tier: 'state' },
-  { id: 'odisha', label: 'Odisha SDMA',             email: 'sdma@odisha.gov.in',      tier: 'state' },
-  { id: 'wb',     label: 'West Bengal SDMA',        email: 'sdma@wb.gov.in',          tier: 'state' },
-];
 
-const TIER_COLOR: Record<string, string> = {
-  national: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25',
-  regional: 'bg-blue-500/15 text-blue-400 border-blue-500/25',
-  state:    'bg-purple-500/15 text-purple-400 border-purple-500/25',
-};
+import PageLayout, { SectionHeader } from '../components/PageLayout';
 
-const SEV_COLOR: Record<Alert['severity'], string> = {
-  Info:     'bg-blue-500/15 text-blue-400 border-blue-500/25',
-  Warning:  'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
-  Critical: 'bg-red-500/15 text-red-400 border-red-500/25',
-};
+import {
+  getGovernmentStatus,
+  getGovernmentAlerts,
+  getGovernmentReport,
+  getGovernmentAudit,
+  getGovernmentApiBase,
+  type GovernmentApiResponse,
+  type GovernmentAlert,
+  type GovernmentAuditRecord,
+} from '../api/governmentApi';
+
+function formatTimestamp(value?: string | null): string {
+  if (!value) return '—';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hour12: false,
+  });
+}
+
+function extractArray<T>(
+  value: unknown,
+  keys: string[]
+): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === 'object') {
+    const object = value as Record<string, unknown>;
+
+    for (const key of keys) {
+      if (Array.isArray(object[key])) {
+        return object[key] as T[];
+      }
+    }
+  }
+
+  return [];
+}
 
 export default function GovPortalPage() {
-  const { user } = useAuth();
-  const { alerts, addAlert, acknowledgeAlert, getLatestRecord } = useData();
-  const latest = getLatestRecord();
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [apiChecking, setApiChecking] = useState(true);
 
-  // Manual alert form
-  const [severity, setSeverity]     = useState<Alert['severity']>('Warning');
-  const [message, setMessage]       = useState('');
-  const [trigger, setTrigger]       = useState('Manual Government Issue');
-  const [selRecipients, setSelRec]  = useState<string[]>(['ndma', 'imd', 'coast']);
-  const [sending, setSending]       = useState(false);
-  const [sent, setSent]             = useState(false);
+  const [apiStatus, setApiStatus] =
+    useState<GovernmentApiResponse | null>(null);
 
-  // Filter state
-  const [filter, setFilter]         = useState<'all' | 'active' | 'acknowledged'>('all');
-  const [activeTab, setActiveTab]   = useState<'alerts' | 'compose' | 'audit'>('alerts');
+  const [selectedDate, setSelectedDate] =
+    useState('2025-12-31');
 
-  const filteredAlerts = alerts.filter(a => {
-    if (filter === 'active') return !a.acknowledged;
-    if (filter === 'acknowledged') return a.acknowledged;
-    return true;
-  });
+  const [alerts, setAlerts] =
+    useState<GovernmentAlert[]>([]);
 
-  const toggleRecipient = (id: string) => {
-    setSelRec(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+  const [auditRecords, setAuditRecords] =
+    useState<GovernmentAuditRecord[]>([]);
+
+  const [report, setReport] =
+    useState<GovernmentApiResponse | null>(null);
+
+  const [loadingOperations, setLoadingOperations] =
+    useState(false);
+
+  const [loadingAudit, setLoadingAudit] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [activeTab, setActiveTab] =
+    useState<'alerts' | 'report' | 'audit'>('alerts');
+
+  /*
+   * ---------------------------------------------------------
+   * GOVERNMENT API STATUS
+   * ---------------------------------------------------------
+   */
+
+  const checkStatus = useCallback(async () => {
+    setApiChecking(true);
+
+    try {
+      const response = await getGovernmentStatus();
+
+      setApiStatus(response);
+      setApiOnline(response.success === true);
+    } catch (err) {
+      setApiOnline(false);
+      setApiStatus(null);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Government API unavailable'
+      );
+    } finally {
+      setApiChecking(false);
+    }
+  }, []);
+
+  /*
+   * ---------------------------------------------------------
+   * AUDIT LOG
+   * ---------------------------------------------------------
+   */
+
+  const loadAudit = useCallback(async () => {
+    setLoadingAudit(true);
+
+    try {
+      const response = await getGovernmentAudit();
+
+      const records = extractArray<GovernmentAuditRecord>(
+        response.data,
+        ['records', 'audit_records']
+      );
+
+      setAuditRecords(records);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load government audit records'
+      );
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, []);
+
+  /*
+   * ---------------------------------------------------------
+   * ALERTS + REPORT
+   * ---------------------------------------------------------
+   */
+
+  const loadOperations = useCallback(async () => {
+    setLoadingOperations(true);
+    setError(null);
+
+    try {
+      const [alertsResponse, reportResponse] =
+        await Promise.all([
+          getGovernmentAlerts(selectedDate),
+          getGovernmentReport(selectedDate),
+        ]);
+
+      const alertRecords =
+        extractArray<GovernmentAlert>(
+          alertsResponse.data,
+          ['alerts', 'items', 'records']
+        );
+
+      setAlerts(alertRecords);
+      setReport(reportResponse);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load government operational data'
+      );
+    } finally {
+      setLoadingOperations(false);
+    }
+  }, [selectedDate]);
+
+  /*
+   * ---------------------------------------------------------
+   * INITIAL LOAD
+   * ---------------------------------------------------------
+   */
+
+  useEffect(() => {
+    void checkStatus();
+    void loadAudit();
+  }, [checkStatus, loadAudit]);
+
+  useEffect(() => {
+    void loadOperations();
+  }, [loadOperations]);
+
+  /*
+   * ---------------------------------------------------------
+   * DERIVED DATA
+   * ---------------------------------------------------------
+   */
+
+  const activeAlerts = useMemo(() => {
+    return alerts.filter((alert) => {
+      const status = String(
+        alert.status ?? ''
+      ).toUpperCase();
+
+      return (
+        status === 'ACTIVE' ||
+        status === 'OPEN' ||
+        status === ''
+      );
+    });
+  }, [alerts]);
+
+  const highPriorityAlerts = useMemo(() => {
+    return alerts.filter((alert) => {
+      const severity = String(
+        alert.severity ?? ''
+      ).toUpperCase();
+
+      return [
+        'CRITICAL',
+        'SEVERE',
+        'HIGH',
+      ].includes(severity);
+    });
+  }, [alerts]);
+
+  const reportData =
+    report?.data ?? {};
+
+  /*
+   * ---------------------------------------------------------
+   * REFRESH
+   * ---------------------------------------------------------
+   */
+
+  const refreshAll = async () => {
+    setError(null);
+
+    await Promise.all([
+      checkStatus(),
+      loadAudit(),
+      loadOperations(),
+    ]);
   };
 
-  const handleSendAlert = useCallback(async () => {
-    if (!message.trim() || selRecipients.length === 0) return;
-    setSending(true);
-    await new Promise(r => setTimeout(r, 1500));
-    addAlert({
-      triggerEvent: trigger,
-      recipients: selRecipients.map(id => RECIPIENTS.find(r => r.id === id)!.label),
-      severity,
-      message: message.trim(),
-      acknowledged: false,
-    });
-    setSending(false);
-    setSent(true);
-    setMessage('');
-    setTimeout(() => { setSent(false); setActiveTab('alerts'); }, 2000);
-  }, [message, selRecipients, severity, trigger, addAlert]);
-
-  // Auto-alert: check if latest record warrants one (derived from OHC + thermocline)
-  const derivedRiskScore = latest
-    ? Math.min(95, (latest.ohc > 80 ? 30 : latest.ohc > 60 ? 18 : 8)
-        + (latest.thermoclineDepth > 80 ? 20 : latest.thermoclineDepth > 60 ? 10 : 3)
-        + (latest.mld > 40 ? 10 : 5)
-        + (latest.inputs.sst > 29 ? 20 : latest.inputs.sst > 27 ? 10 : 5))
-    : 0;
-  const autoAlertNeeded = latest && derivedRiskScore >= 55;
-
-  const activeCount      = alerts.filter(a => !a.acknowledged).length;
-  const criticalCount    = alerts.filter(a => a.severity === 'Critical' && !a.acknowledged).length;
-  const last24hCount     = alerts.filter(a => Date.now() - new Date(a.timestamp).getTime() < 86400000).length;
+  /*
+   * ---------------------------------------------------------
+   * UI
+   * ---------------------------------------------------------
+   */
 
   return (
     <PageLayout>
-      <PageContainer>
-        <PageHeader
-          category="भारत सरकार · NATIONAL DISASTER MANAGEMENT AUTHORITY (NDMA) & MoES"
-          badge={
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-mono shadow-md">
-              <Shield size={12} className="text-amber-400" />
-              <span>SOVEREIGN CLEARANCE LEVEL 2 · {user?.name || 'NDMA OFFICER'}</span>
-            </div>
-          }
-          icon={<Shield size={20} className="text-amber-400" />}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+        <SectionHeader
           title="National Ocean Emergency & Disaster Command"
-          subtitle="Direct operational dispatch console coordinating INCOIS, IMD New Delhi, Indian Coast Guard, Naval Command, and Coastal State SDMAs under the National Cyclone Risk Mitigation Project (NCRMP)"
+          subtitle="Government operations console connected to the OceanEmbed Government Intelligence API"
+          icon={
+            <Shield
+              size={18}
+              className="text-yellow-400"
+            />
+          }
         />
 
-        {/* Auto-alert banner */}
-        {autoAlertNeeded && (
-          <div className="mb-6 p-4 rounded-2xl border border-red-500/40 bg-red-500/10 glow-red fade-in-up">
-            <div className="flex items-start gap-3">
-              <AlertTriangle size={20} className="text-red-400 shrink-0 mt-0.5 animate-pulse" />
-              <div className="flex-1">
-                <p className="font-semibold text-red-300">Automatic Alert Triggered</p>
-                <p className="text-sm text-red-300/70 mt-1">
-                  Elevated ocean conditions detected over {latest?.location ?? '—'}.
-                  OHC: {latest?.ohc?.toFixed(0) ?? '—'} kJ/cm² · SST: {latest?.inputs.sst?.toFixed(1) ?? '—'}°C · Derived risk score: {derivedRiskScore}/100.
-                  Automatic notifications dispatched to NDMA, IMD, and coastal authorities.
-                </p>
-              </div>
-              <button
-                className="btn-3d shrink-0 px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-xs hover:bg-red-500/30 transition-all cursor-pointer"
-                onClick={() => setActiveTab('alerts')}
-              >
-                View Alert
-              </button>
-            </div>
-          </div>
-        )}
+        {/* ------------------------------------------------ */}
+        {/* TOP CONTROLS */}
+        {/* ------------------------------------------------ */}
 
-        {/* Stat cards with 3D hover physics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {[
-            { label: 'Active Alerts', value: activeCount, color: 'red', icon: Bell },
-            { label: 'Critical', value: criticalCount, color: 'orange', icon: AlertTriangle },
-            { label: 'Last 24h', value: last24hCount, color: 'yellow', icon: Clock },
-            { label: 'Total Logged', value: alerts.length, color: 'blue', icon: FileText },
-          ].map(({ label, value, color, icon: Icon }) => (
-            <div key={label} className={`stat-card-3d glass rounded-2xl p-5 border border-${color}-500/25 bg-gradient-to-br from-${color}-500/10 to-transparent cursor-pointer`}>
-              <div className="flex items-center justify-between mb-3">
-                <Icon size={18} className={`text-${color}-400`} />
-                {value > 0 && <span className={`w-2 h-2 rounded-full bg-${color}-400 animate-pulse`} />}
-              </div>
-              <p className="text-3xl font-black text-white">{value}</p>
-              <p className="text-xs text-white/50 mt-1">{label}</p>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+
+          <div className="px-4 py-2 rounded-xl border border-yellow-500/25 bg-yellow-500/10 text-yellow-300 text-sm">
+            Government Officer Access
+          </div>
+
+          <div className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-white/60 text-sm">
+            Production API:{' '}
+            <span className="text-white">
+              {getGovernmentApiBase()}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void refreshAll()}
+            disabled={
+              apiChecking ||
+              loadingAudit ||
+              loadingOperations
+            }
+            className="ml-auto px-4 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw
+              size={14}
+              className={
+                apiChecking ||
+                loadingAudit ||
+                loadingOperations
+                  ? 'animate-spin'
+                  : ''
+              }
+            />
+
+            Refresh
+          </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 p-1 glass rounded-xl border border-white/10 mb-6 w-fit overflow-x-auto">
-          {([
-            { id: 'alerts',  label: 'Alert Feed', icon: Bell },
-            { id: 'compose', label: 'Send Alert', icon: Send },
-            { id: 'audit',   label: 'Audit Log',  icon: FileText },
-          ] as const).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                activeTab === id
-                  ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-white border border-yellow-500/30'
-                  : 'text-white/50 hover:text-white hover:bg-white/5'
+        {/* ------------------------------------------------ */}
+        {/* API STATUS */}
+        {/* ------------------------------------------------ */}
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+
+          <div className="flex flex-wrap items-center gap-3">
+
+            <span
+              className={`w-3 h-3 rounded-full ${
+                apiOnline === true
+                  ? 'bg-green-400'
+                  : apiOnline === false
+                    ? 'bg-red-400'
+                    : 'bg-yellow-400'
+              }`}
+            />
+
+            <span className="font-mono text-sm text-white/80">
+              Government Intelligence API:
+            </span>
+
+            <span
+              className={`font-mono text-sm font-semibold ${
+                apiOnline === true
+                  ? 'text-green-400'
+                  : apiOnline === false
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
               }`}
             >
-              <Icon size={14} />
-              {label}
-              {id === 'alerts' && activeCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">{activeCount}</span>
-              )}
-            </button>
-          ))}
+              {apiChecking
+                ? 'CONNECTING'
+                : apiOnline
+                  ? 'ONLINE'
+                  : 'OFFLINE'}
+            </span>
+
+            {apiStatus?.request_id && (
+              <span className="text-xs text-white/30 ml-auto font-mono">
+                request {apiStatus.request_id}
+              </span>
+            )}
+          </div>
+
+          {apiStatus?.timestamp && (
+            <p className="text-xs text-white/35 mt-2">
+              Last API response:{' '}
+              {formatTimestamp(apiStatus.timestamp)}
+            </p>
+          )}
         </div>
 
-        {/* Alert Feed */}
-        {activeTab === 'alerts' && (
-          <div className="space-y-4 fade-in-up">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-2">
-              {(['all', 'active', 'acknowledged'] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
-                    filter === f
-                      ? 'glass border border-cyan-500/30 text-cyan-400'
-                      : 'glass border border-white/10 text-white/50 hover:text-white'
-                  }`}
-                >
-                  {f} ({f === 'all' ? alerts.length : f === 'active' ? activeCount : alerts.length - activeCount})
-                </button>
-              ))}
-            </div>
+        {/* ------------------------------------------------ */}
+        {/* ERROR */}
+        {/* ------------------------------------------------ */}
 
-            {filteredAlerts.length === 0 && (
-              <div className="glass rounded-2xl p-12 border border-white/10 text-center">
-                <CheckCircle2 size={32} className="text-green-400 mx-auto mb-3" />
-                <p className="text-white/60">No alerts in this category</p>
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+
+            <div className="flex items-start gap-2">
+
+              <AlertTriangle
+                size={16}
+                className="shrink-0 mt-0.5"
+              />
+
+              <div>
+                <p className="font-semibold">
+                  Government API request issue
+                </p>
+
+                <p className="mt-1 text-red-300/70">
+                  {error}
+                </p>
               </div>
-            )}
 
-            {filteredAlerts.map(alert => (
-              <div
-                key={alert.id}
-                className={`glass rounded-2xl p-5 border transition-all ${
-                  !alert.acknowledged ? `${SEV_COLOR[alert.severity]} glow-${alert.severity === 'Critical' ? 'red' : 'none'}` : 'border-white/8 opacity-70'
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------ */}
+        {/* DATE */}
+        {/* ------------------------------------------------ */}
+
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+
+          <Calendar
+            size={16}
+            className="text-cyan-400"
+          />
+
+          <label
+            htmlFor="government-date"
+            className="text-sm text-white/60"
+          >
+            Operational date
+          </label>
+
+          <input
+            id="government-date"
+            type="date"
+            value={selectedDate}
+            min="2018-01-01"
+            max="2025-12-31"
+            onChange={(event) =>
+              setSelectedDate(event.target.value)
+            }
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+          />
+
+          <span className="text-xs text-white/35">
+            Data is requested directly from the FastAPI
+            Government Intelligence API.
+          </span>
+        </div>
+
+        {/* ------------------------------------------------ */}
+        {/* SUMMARY CARDS */}
+        {/* ------------------------------------------------ */}
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+
+            <Bell
+              size={18}
+              className="text-red-400 mb-3"
+            />
+
+            <p className="text-3xl font-black text-white">
+              {activeAlerts.length}
+            </p>
+
+            <p className="text-xs text-white/50 mt-1">
+              Active API Alerts
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5">
+
+            <AlertTriangle
+              size={18}
+              className="text-orange-400 mb-3"
+            />
+
+            <p className="text-3xl font-black text-white">
+              {highPriorityAlerts.length}
+            </p>
+
+            <p className="text-xs text-white/50 mt-1">
+              High/Critical Alerts
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+
+            <FileText
+              size={18}
+              className="text-cyan-400 mb-3"
+            />
+
+            <p className="text-3xl font-black text-white">
+              {auditRecords.length}
+            </p>
+
+            <p className="text-xs text-white/50 mt-1">
+              Backend Audit Records
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-5">
+
+            <Server
+              size={18}
+              className="text-green-400 mb-3"
+            />
+
+            <p className="text-3xl font-black text-white">
+              {apiOnline === true ? 'OK' : '—'}
+            </p>
+
+            <p className="text-xs text-white/50 mt-1">
+              Government API
+            </p>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------ */}
+        {/* TABS */}
+        {/* ------------------------------------------------ */}
+
+        <div className="flex gap-1 p-1 rounded-xl border border-white/10 bg-white/5 mb-6 w-fit">
+
+          {[
+            {
+              id: 'alerts' as const,
+              label: 'Alert Feed',
+              icon: Bell,
+            },
+            {
+              id: 'report' as const,
+              label: 'Daily Report',
+              icon: FileText,
+            },
+            {
+              id: 'audit' as const,
+              label: 'Audit Log',
+              icon: Database,
+            },
+          ].map(
+            ({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium ${
+                  activeTab === id
+                    ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/25'
+                    : 'text-white/50 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${SEV_COLOR[alert.severity]}`}>
-                        {alert.severity}
-                      </span>
-                      {!alert.acknowledged && (
-                        <span className="text-xs text-red-400 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse inline-block" />
-                          Unacknowledged
-                        </span>
-                      )}
-                      <span className="text-xs text-white/30 ml-auto">{format(new Date(alert.timestamp), 'MMM d, yyyy · HH:mm IST')}</span>
-                    </div>
-                    <p className="text-sm text-white mb-2 leading-relaxed">{alert.message}</p>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="text-white/40">Trigger: <span className="text-white/70">{alert.triggerEvent}</span></span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {alert.recipients.map(r => (
-                        <span key={r} className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/60">
-                          {r}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  {!alert.acknowledged && (
-                    <button
-                      onClick={() => acknowledgeAlert(alert.id)}
-                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass border border-green-500/30 text-green-400 text-xs hover:bg-green-500/15 transition-all"
+                <Icon size={14} />
+                {label}
+              </button>
+            )
+          )}
+        </div>
+
+        {/* ================================================= */}
+        {/* ALERT TAB */}
+        {/* ================================================= */}
+
+        {activeTab === 'alerts' && (
+          <section className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+
+            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+
+              <div>
+                <h2 className="font-semibold text-white flex items-center gap-2">
+                  <Bell
+                    size={16}
+                    className="text-red-400"
+                  />
+                  Government Alert Feed
+                </h2>
+
+                <p className="text-xs text-white/40 mt-1">
+                  Real response from{' '}
+                  /api/government/alerts/{selectedDate}
+                </p>
+              </div>
+
+              <span className="text-xs text-white/40">
+                {alerts.length} API record(s)
+              </span>
+            </div>
+
+            {loadingOperations ? (
+              <div className="p-10 text-center text-white/40">
+
+                <RefreshCw
+                  size={20}
+                  className="animate-spin mx-auto mb-3"
+                />
+
+                Loading government alerts...
+              </div>
+            ) : alerts.length === 0 ? (
+              <div className="p-10 text-center">
+
+                <CheckCircle2
+                  size={30}
+                  className="text-green-400 mx-auto mb-3"
+                />
+
+                <p className="text-white/60">
+                  No alerts returned by the API.
+                </p>
+
+                <p className="text-xs text-white/30 mt-1">
+                  This is the actual API result.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+
+                {alerts.map((alert, index) => {
+
+                  const severity =
+                    String(
+                      alert.severity ??
+                        'UNCLASSIFIED'
+                    );
+
+                  const status =
+                    String(
+                      alert.status ??
+                        'ACTIVE'
+                    );
+
+                  return (
+                    <div
+                      key={
+                        alert.id ??
+                        alert.alert_id ??
+                        index
+                      }
+                      className="p-6"
                     >
-                      <CheckCheck size={12} />
-                      ACK
-                    </button>
-                  )}
-                </div>
+
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+
+                        <span className="px-2 py-1 rounded-full border border-red-500/25 bg-red-500/10 text-red-300 text-xs">
+                          {severity}
+                        </span>
+
+                        <span className="px-2 py-1 rounded-full border border-white/10 bg-white/5 text-white/60 text-xs">
+                          {status}
+                        </span>
+
+                        {alert.source && (
+                          <span className="text-xs text-white/30">
+                            Source:{' '}
+                            {String(alert.source)}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-sm text-white/80 leading-relaxed">
+                        {alert.message ??
+                          `Government alert returned for ${selectedDate}.`}
+                      </p>
+
+                      <div className="flex flex-wrap gap-4 mt-4 text-xs text-white/40">
+
+                        {alert.event_cells !==
+                          undefined && (
+                          <span>
+                            Event cells:{' '}
+                            {String(
+                              alert.event_cells
+                            )}
+                          </span>
+                        )}
+
+                        {alert.forecast_days !==
+                          undefined && (
+                          <span>
+                            Forecast days:{' '}
+                            {String(
+                              alert.forecast_days
+                            )}
+                          </span>
+                        )}
+
+                        {alert.peak_day && (
+                          <span>
+                            Peak day:{' '}
+                            {String(
+                              alert.peak_day
+                            )}
+                          </span>
+                        )}
+
+                        {(alert.timestamp ||
+                          alert.created_at) && (
+                          <span className="flex items-center gap-1">
+
+                            <Clock size={12} />
+
+                            {formatTimestamp(
+                              String(
+                                alert.timestamp ??
+                                  alert.created_at
+                              )
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            )}
+          </section>
         )}
 
-        {/* Compose alert */}
-        {activeTab === 'compose' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-up">
-            <div className="lg:col-span-2 space-y-5">
-              <div className="glass rounded-2xl p-6 border border-white/10 space-y-5">
-                <h2 className="font-semibold text-white flex items-center gap-2">
-                  <Send size={16} className="text-yellow-400" />
-                  Compose Government Alert
-                </h2>
+        {/* ================================================= */}
+        {/* REPORT TAB */}
+        {/* ================================================= */}
 
-                {/* Severity */}
-                <div className="space-y-2">
-                  <label className="text-xs text-white/50 uppercase tracking-wider">Severity Level</label>
-                  <div className="flex gap-2">
-                    {(['Info', 'Warning', 'Critical'] as Alert['severity'][]).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setSeverity(s)}
-                        className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${
-                          severity === s
-                            ? SEV_COLOR[s]
-                            : 'glass border-white/10 text-white/40 hover:text-white/70'
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    ))}
+        {activeTab === 'report' && (
+          <section className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+
+            <div className="px-6 py-4 border-b border-white/10">
+
+              <h2 className="font-semibold text-white flex items-center gap-2">
+
+                <FileText
+                  size={16}
+                  className="text-cyan-400"
+                />
+
+                Daily Government Operational Report
+              </h2>
+
+              <p className="text-xs text-white/40 mt-1">
+                Real response from{' '}
+                /api/government/report/{selectedDate}
+              </p>
+            </div>
+
+            {loadingOperations ? (
+              <div className="p-10 text-center text-white/40">
+
+                <RefreshCw
+                  size={20}
+                  className="animate-spin mx-auto mb-3"
+                />
+
+                Loading report...
+              </div>
+            ) : (
+              <div className="p-6 space-y-5">
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                  <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+
+                    <Activity
+                      size={16}
+                      className="text-cyan-400 mb-2"
+                    />
+
+                    <p className="text-xs text-white/40">
+                      Report success
+                    </p>
+
+                    <p className="text-lg font-semibold text-white">
+                      {report?.success
+                        ? 'YES'
+                        : 'NO'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+
+                    <Database
+                      size={16}
+                      className="text-green-400 mb-2"
+                    />
+
+                    <p className="text-xs text-white/40">
+                      Request ID
+                    </p>
+
+                    <p className="text-sm font-mono text-white break-all">
+                      {report?.request_id ??
+                        '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+
+                    <Clock
+                      size={16}
+                      className="text-yellow-400 mb-2"
+                    />
+
+                    <p className="text-xs text-white/40">
+                      Generated
+                    </p>
+
+                    <p className="text-sm text-white">
+                      {formatTimestamp(
+                        report?.timestamp
+                      )}
+                    </p>
                   </div>
                 </div>
 
-                {/* Trigger */}
-                <div className="space-y-2">
-                  <label className="text-xs text-white/50 uppercase tracking-wider">Trigger / Event</label>
-                  <input
-                    type="text"
-                    value={trigger}
-                    onChange={e => setTrigger(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-yellow-500/40 transition-all"
-                    placeholder="e.g. Cyclone Risk: High"
-                  />
-                </div>
-
-                {/* Message */}
-                <div className="space-y-2">
-                  <label className="text-xs text-white/50 uppercase tracking-wider">Alert Message</label>
-                  <textarea
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    rows={4}
-                    placeholder="Describe the event, affected region, and recommended actions..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/40 resize-none transition-all"
-                  />
-                  <p className="text-xs text-white/25">{message.length}/500 characters</p>
-                </div>
-
-                <button
-                  onClick={handleSendAlert}
-                  disabled={!message.trim() || selRecipients.length === 0 || sending}
-                  className={`w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-                    sent
-                      ? 'bg-green-500/20 border border-green-500/30 text-green-400'
-                      : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:opacity-90 disabled:opacity-40'
-                  }`}
-                >
-                  {sending ? (
-                    <><RefreshCw size={16} className="animate-spin" /> Dispatching to {selRecipients.length} recipient(s)...</>
-                  ) : sent ? (
-                    <><CheckCircle2 size={16} /> Alert Dispatched Successfully</>
-                  ) : (
-                    <><Send size={16} /> Dispatch Alert to {selRecipients.length} Recipient(s)</>
+                <pre className="overflow-auto max-h-[520px] rounded-xl border border-white/10 bg-black/20 p-5 text-xs text-white/70">
+                  {JSON.stringify(
+                    reportData,
+                    null,
+                    2
                   )}
-                </button>
+                </pre>
               </div>
-            </div>
-
-            {/* Recipients */}
-            <div className="glass rounded-2xl p-5 border border-white/10 h-fit">
-              <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-                <Users size={14} className="text-yellow-400" />
-                Recipients ({selRecipients.length}/{RECIPIENTS.length})
-              </h3>
-              <div className="space-y-2">
-                {RECIPIENTS.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => toggleRecipient(r.id)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
-                      selRecipients.includes(r.id)
-                        ? 'border-yellow-500/30 bg-yellow-500/10'
-                        : 'border-white/8 bg-white/3 hover:bg-white/5'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                      selRecipients.includes(r.id) ? 'border-yellow-400 bg-yellow-400' : 'border-white/30'
-                    }`}>
-                      {selRecipients.includes(r.id) && <span className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white truncate">{r.label}</p>
-                      <p className="text-xs text-white/30 truncate">{r.email}</p>
-                    </div>
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full border ${TIER_COLOR[r.tier]} shrink-0`}>
-                      {r.tier}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+            )}
+          </section>
         )}
 
-        {/* Audit log */}
+        {/* ================================================= */}
+        {/* AUDIT TAB */}
+        {/* ================================================= */}
+
         {activeTab === 'audit' && (
-          <div className="fade-in-up">
-            <div className="glass rounded-2xl border border-white/10 overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/10">
-                <h2 className="font-semibold text-white flex items-center gap-2">
-                  <FileText size={16} className="text-cyan-400" />
-                  Alert Audit Log
-                </h2>
-                <p className="text-xs text-white/40 mt-0.5">All dispatched alerts with full traceability — {alerts.length} records</p>
+          <section className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+
+            <div className="px-6 py-4 border-b border-white/10">
+
+              <h2 className="font-semibold text-white flex items-center gap-2">
+
+                <FileText
+                  size={16}
+                  className="text-cyan-400"
+                />
+
+                Backend Audit Log
+              </h2>
+
+              <p className="text-xs text-white/40 mt-1">
+                Real records returned by{' '}
+                GET /api/government/audit
+              </p>
+            </div>
+
+            {loadingAudit ? (
+              <div className="p-10 text-center text-white/40">
+
+                <RefreshCw
+                  size={20}
+                  className="animate-spin mx-auto mb-3"
+                />
+
+                Loading backend audit records...
               </div>
+            ) : auditRecords.length === 0 ? (
+              <div className="p-10 text-center text-white/40">
+                No audit records returned by the backend.
+              </div>
+            ) : (
               <div className="overflow-x-auto">
+
                 <table className="w-full text-xs">
+
                   <thead>
                     <tr className="border-b border-white/10">
-                      {['Timestamp', 'Severity', 'Trigger', 'Recipients', 'Message', 'Status'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-white/40 font-medium">{h}</th>
-                      ))}
+
+                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                        Timestamp
+                      </th>
+
+                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                        Action
+                      </th>
+
+                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                        Endpoint
+                      </th>
+
+                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                        Status
+                      </th>
+
+                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                        Request ID
+                      </th>
                     </tr>
                   </thead>
+
                   <tbody>
-                    {[...alerts].reverse().map(a => (
-                      <tr key={a.id} className="border-b border-white/5 hover:bg-white/3 transition-all">
-                        <td className="px-4 py-3 text-white/60 whitespace-nowrap">
-                          {format(new Date(a.timestamp), 'MMM d · HH:mm')}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full border text-xs ${SEV_COLOR[a.severity]}`}>
-                            {a.severity}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-white/60 max-w-[120px] truncate">{a.triggerEvent}</td>
-                        <td className="px-4 py-3 text-white/50">{a.recipients.length} agencies</td>
-                        <td className="px-4 py-3 text-white/60 max-w-[200px] truncate">{a.message}</td>
-                        <td className="px-4 py-3">
-                          {a.acknowledged
-                            ? <span className="flex items-center gap-1 text-green-400"><CheckCircle2 size={12} /> ACK'd</span>
-                            : <span className="flex items-center gap-1 text-yellow-400"><Clock size={12} /> Pending</span>
-                          }
-                        </td>
-                      </tr>
-                    ))}
+
+                    {[...auditRecords]
+                      .reverse()
+                      .map(
+                        (
+                          record,
+                          index
+                        ) => (
+                          <tr
+                            key={`${record.request_id ?? 'record'}-${index}`}
+                            className="border-b border-white/5 hover:bg-white/5"
+                          >
+
+                            <td className="px-4 py-3 text-white/60 whitespace-nowrap">
+                              {formatTimestamp(
+                                record.timestamp
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3">
+
+                              <span className="px-2 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+                                {record.action ??
+                                  '—'}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-3 text-white/50 max-w-[360px] truncate">
+                              {record.endpoint ??
+                                '—'}
+                            </td>
+
+                            <td className="px-4 py-3">
+
+                              <span
+                                className={
+                                  record.status_code ===
+                                  200
+                                    ? 'text-green-400'
+                                    : 'text-red-400'
+                                }
+                              >
+                                {record.status_code ??
+                                  '—'}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-3 text-white/40 font-mono whitespace-nowrap">
+                              {record.request_id ??
+                                '—'}
+                            </td>
+
+                          </tr>
+                        )
+                      )}
+
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
+            )}
+          </section>
         )}
-      </PageContainer>
+
+        {/* ------------------------------------------------ */}
+        {/* FOOTER */}
+        {/* ------------------------------------------------ */}
+
+        <div className="mt-6 flex items-center gap-2 text-xs text-white/30">
+
+          <Activity size={12} />
+
+          This portal reads operational data directly
+          from the FastAPI Government Intelligence API.
+          No synthetic ocean measurements are created
+          by this page.
+
+        </div>
+
+      </div>
     </PageLayout>
   );
 }

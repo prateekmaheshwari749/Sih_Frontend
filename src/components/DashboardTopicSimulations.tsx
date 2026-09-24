@@ -239,8 +239,10 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <Sliders size={18} className="text-cyan-400" />
-            <h3 className="font-black text-white text-base tracking-tight">
-              Interactive Oceanographic Topic Simulations
+            <h3 className="font-black text-base tracking-tight">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                Interactive Oceanographic Topic Simulations
+              </span>
             </h3>
           </div>
           <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 self-start sm:self-auto">
@@ -295,11 +297,13 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             <div>
               <div className="flex items-center gap-2">
                 <Zap size={18} className="text-orange-400" />
-                <h3 className="font-black text-white text-base tracking-tight">
-                  Topic 1 Simulation: Ocean Heat Content &amp; Cyclone Rapid Intensification
+                <h3 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Topic 1 Simulation: Ocean Heat Content &amp; Cyclone Rapid Intensification
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                 Simulate how subsurface thermal reservoir (&gt;80 kJ/cm²) prevents cold water choke and accelerates tropical cyclone vortex
               </p>
             </div>
@@ -386,7 +390,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
 
             {/* Right: Visual Simulation Display (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
-              <div className="p-6 rounded-3xl bg-[#020917] border border-white/10 flex flex-col items-center justify-center relative overflow-hidden min-h-[300px]">
+              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 flex flex-col items-center justify-center relative overflow-hidden min-h-[300px]">
                 {/* Visual Vortex Graphic */}
                 <div
                   className={`relative rounded-full flex items-center justify-center transition-all duration-500 ${
@@ -408,7 +412,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
                     className="w-full h-full object-contain opacity-80"
                   />
                   {/* Eye Core */}
-                  <div className="absolute w-8 h-8 rounded-full bg-[#020917] border-2 border-white flex items-center justify-center shadow-lg">
+                  <div className="absolute w-8 h-8 rounded-full bg-white border border-slate-200 shadow-sm text-slate-800 border-2 border-white flex items-center justify-center shadow-lg">
                     <span className="text-[9px] font-black font-mono text-yellow-400">
                       {cycloneCalculations.centralPressure}
                     </span>
@@ -468,11 +472,13 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             <div>
               <div className="flex items-center gap-2">
                 <Volume2 size={18} className="text-cyan-400" />
-                <h3 className="font-black text-white text-base tracking-tight">
-                  Topic 2 Simulation: SOFAR Channel Acoustic Waveguide (Mackenzie 1981)
+                <h3 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Topic 2 Simulation: SOFAR Channel Acoustic Waveguide (Mackenzie 1981)
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                 Simulate deep ocean sound speed refraction and sound channel axis trapping used in submarine detection &amp; marine acoustics
               </p>
             </div>
@@ -546,7 +552,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
 
             {/* Right Acoustic Ray Canvas / Depth Visualizer (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
-              <div className="p-5 rounded-3xl bg-[#020917] border border-white/10 space-y-4">
+              <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 space-y-4">
                 <div className="flex items-center justify-between text-xs border-b border-white/10 pb-2">
                   <span className="text-white/40 font-mono">DEPTH PROFILE (0–1000m)</span>
                   <span className="text-cyan-400 font-mono font-bold">
@@ -595,11 +601,13 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             <div>
               <div className="flex items-center gap-2">
                 <Waves size={18} className="text-teal-400" />
-                <h3 className="font-black text-white text-base tracking-tight">
-                  Topic 3 Simulation: Wind-Driven Ekman Upwelling &amp; Thermocline Displacement
+                <h3 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Topic 3 Simulation: Wind-Driven Ekman Upwelling &amp; Thermocline Displacement
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                 Simulate how surface wind stress and mesoscale eddies lift or depress the 26°C isotherm, creating cold wakes
               </p>
             </div>
@@ -660,7 +668,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             </div>
 
             {/* Right Graphic: Water Column Cross-Section */}
-            <div className="lg:col-span-7 p-6 rounded-3xl bg-[#020917] border border-white/10 flex flex-col justify-between min-h-[280px]">
+            <div className="lg:col-span-7 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 flex flex-col justify-between min-h-[280px]">
               <div className="flex items-center justify-between text-xs border-b border-white/10 pb-2">
                 <span className="text-white/40 font-mono">VERTICAL TEMPERATURE STRATA (0–200m)</span>
                 <span className="text-yellow-400 font-mono font-bold">
@@ -710,11 +718,13 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             <div>
               <div className="flex items-center gap-2">
                 <Droplets size={18} className="text-blue-400" />
-                <h3 className="font-black text-white text-base tracking-tight">
-                  Topic 4 Simulation: Ganga-Brahmaputra River Plume &amp; Barrier Layer Thickness
+                <h3 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Topic 4 Simulation: Ganga-Brahmaputra River Plume &amp; Barrier Layer Thickness
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                 Simulate how low-salinity river runoff in the northern Bay of Bengal creates a freshwater lens that traps heat in the upper 20 meters
               </p>
             </div>
@@ -761,7 +771,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
                 />
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-blue-950/20 border border-blue-500/30 text-xs text-white/70 leading-relaxed">
+              <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 text-slate-700 border border-blue-500/30 text-xs text-white/70 leading-relaxed">
                 <strong className="text-blue-300">Barrier Layer Trapping Physics: </strong>
                 Freshwater lens thickness is <strong>{salinityCalculations.freshwaterLensM}m</strong> with surface salinity at <strong>{salinityCalculations.surfaceSalinityPsu} PSU</strong>. 
                 The halocline sits higher than the thermocline, creating a <strong>{salinityCalculations.barrierLayerThickness}m Barrier Layer</strong> with a Heat Trapping Index of <strong>{salinityCalculations.heatTrapIndex}%</strong>.
@@ -769,7 +779,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             </div>
 
             {/* Right Graphic */}
-            <div className="lg:col-span-7 p-6 rounded-3xl bg-[#020917] border border-white/10 flex flex-col justify-between min-h-[280px]">
+            <div className="lg:col-span-7 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 flex flex-col justify-between min-h-[280px]">
               <div className="flex items-center justify-between text-xs border-b border-white/10 pb-2">
                 <span className="text-white/40 font-mono">SALINITY STRATIFICATION (BAY OF BENGAL)</span>
                 <span className="text-cyan-400 font-mono font-bold">
@@ -826,11 +836,13 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             <div>
               <div className="flex items-center gap-2">
                 <Layers size={18} className="text-purple-400" />
-                <h3 className="font-black text-white text-base tracking-tight">
-                  Topic 5 Simulation: 0–1000m Ocean Strata &amp; Autonomous ARGO Profiler
+                <h3 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Topic 5 Simulation: 0–1000m Ocean Strata &amp; Autonomous ARGO Profiler
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                 Simulate CTD float descent through 5 distinct ocean regimes, calculating hydrostatic pressure, light extinction, and sound velocity
               </p>
             </div>
@@ -900,7 +912,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
               </div>
 
               {/* Live Float CTD Telemetry Card */}
-              <div className="p-4 rounded-2xl bg-[#020917] border border-white/10 grid grid-cols-2 gap-3 text-xs">
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 grid grid-cols-2 gap-3 text-xs">
                 <div className="p-2.5 rounded-xl bg-white/5">
                   <span className="text-white/40 block text-[10px] uppercase font-mono">Hydrostatic Pressure</span>
                   <span className="text-base font-black font-mono text-purple-400">{strataCalculations.pressureAtm} atm</span>
@@ -925,7 +937,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             </div>
 
             {/* Right Graphic: Illuminated Water Column with ARGO Float */}
-            <div className="lg:col-span-7 p-6 rounded-3xl bg-[#020917] border border-white/10 flex flex-col justify-between relative min-h-[320px] overflow-hidden">
+            <div className="lg:col-span-7 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 flex flex-col justify-between relative min-h-[320px] overflow-hidden">
               <div className="flex items-center justify-between text-xs border-b border-white/10 pb-2 z-10">
                 <span className="text-white/40 font-mono">CURRENT STRATUM:</span>
                 <span className="font-extrabold text-sm" style={{ color: strataCalculations.zoneColor }}>
@@ -973,11 +985,13 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             <div>
               <div className="flex items-center gap-2">
                 <Thermometer size={18} className="text-red-400" />
-                <h3 className="font-black text-white text-base tracking-tight">
-                  Topic 6 Simulation: Marine Heatwave (MHW) &amp; Coral Bleaching Stress
+                <h3 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Topic 6 Simulation: Marine Heatwave (MHW) &amp; Coral Bleaching Stress
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                 Simulate cumulative thermal stress, Degree Heating Weeks (DHW), and ecological bleaching thresholds in Indian Ocean coral atolls
               </p>
             </div>
@@ -1056,7 +1070,7 @@ export default function DashboardTopicSimulations({ initialTopic = 'ohc', classN
             </div>
 
             {/* Right Graphic: Coral Reef Health Status */}
-            <div className="lg:col-span-7 p-6 rounded-3xl bg-[#020917] border border-white/10 flex flex-col justify-between min-h-[280px]">
+            <div className="lg:col-span-7 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-800 border border-white/10 flex flex-col justify-between min-h-[280px]">
               <div className="flex items-center justify-between text-xs border-b border-white/10 pb-2">
                 <span className="text-white/40 font-mono">ECOSYSTEM BLEACHING RESPONSE</span>
                 <span className="font-bold font-mono text-sm" style={{ color: heatwaveCalculations.color }}>

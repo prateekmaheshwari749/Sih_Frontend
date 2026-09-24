@@ -542,7 +542,7 @@ function MapViewController({ center, zoom }: { center: [number, number]; zoom: n
   return null;
 }
 
-export default function CyclonePage() {
+export default function CyclonePage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
 
   // Active view tabs
@@ -790,9 +790,8 @@ export default function CyclonePage() {
     });
   };
 
-  return (
-    <PageLayout>
-      <PageContainer>
+  const pageContent = (
+    <PageContainer>
         {/* ── Page Header ── */}
         <PageHeader
           category="MINISTRY OF EARTH SCIENCES (MoES) · INDIA METEOROLOGICAL DEPARTMENT (IMD)"
@@ -807,13 +806,6 @@ export default function CyclonePage() {
           subtitle="Interactive world map simulation and physics-informed early warning from Today to Day +7, powered by 0–1000m subsurface Ocean Heat Content (OHC)"
           actions={
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate('/map')}
-                className="btn-glass text-xs flex items-center gap-1.5"
-              >
-                <Layers size={13} className="text-cyan-400" />
-                3D Subsurface Column
-              </button>
               <button
                 onClick={() => navigate('/gov')}
                 className="btn-primary-cyan text-xs flex items-center gap-1.5"
@@ -833,8 +825,10 @@ export default function CyclonePage() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-black text-white text-base tracking-tight">
-                  Active Monitored Cyclone: Deep Threat BOB-02
+                <h2 className="font-black text-base tracking-tight">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Active Monitored Cyclone: Deep Threat BOB-02
+                  </span>
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-red-500/25 text-red-300 font-mono text-[10px] font-bold border border-red-500/40">
                   76% RAPID INTENSIFICATION PROBABILITY
@@ -843,7 +837,7 @@ export default function CyclonePage() {
                   7-DAY EARLY WARNING PROTOCOL
                 </span>
               </div>
-              <p className="text-xs text-white/60 mt-1">
+              <p className="text-xs text-sky-100/90 font-medium mt-1">
                 Central Bay of Bengal ({currentStep.lat}°N, {currentStep.lon}°E) · Active Tracking: {currentStep.translationDirection} at {currentStep.translationSpeedKmh} km/h · Subsurface OHC Reservoir: 88–94 kJ/cm²
               </p>
             </div>
@@ -902,11 +896,13 @@ export default function CyclonePage() {
                     <Clock size={16} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                      7-Day Cyclone Warning Forecast:
+                    <h3 className="font-bold text-sm flex items-center gap-2">
+                      <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                        7-Day Cyclone Warning Forecast:
+                      </span>
                       <span className="text-cyan-300 font-mono">{currentStep.dayTitle}</span>
                     </h3>
-                    <p className="text-[11px] text-white/50">
+                    <p className="text-[11px] text-sky-100/90 font-medium">
                       Select any milestone or click Play to simulate cyclone evolution from Today across Day +1 to Day +7
                     </p>
                   </div>
@@ -993,7 +989,7 @@ export default function CyclonePage() {
               <div className="lg:col-span-7 space-y-4">
                 <div className="glass rounded-3xl border border-cyan-500/30 depth-shadow overflow-hidden">
                   {/* Map Controls Header */}
-                  <div className="p-3.5 border-b border-white/10 bg-[#020917]/90 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="p-3.5 border-b border-white/10 bg-white/95 border-b border-slate-200 text-slate-800 flex flex-wrap items-center justify-between gap-2.5 text-xs">
                     <div className="flex items-center gap-2">
                       <IndiaFlag className="w-4 h-3 rounded-sm shadow-sm" />
                       <span className="font-bold text-white flex items-center gap-1.5">
@@ -1268,7 +1264,7 @@ export default function CyclonePage() {
                   </div>
 
                   {/* Layer Toggles Toolbar */}
-                  <div className="p-3 bg-[#020917] border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="p-3 bg-slate-50 border-t border-slate-200 text-slate-800 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="text-white/40 font-mono text-[10px]">Simulation Layers:</span>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
@@ -1355,10 +1351,12 @@ export default function CyclonePage() {
                         <IndiaFlag className="w-3.5 h-2.5 rounded-xs" />
                         IMD OFFICIAL CYCLONE BULLETIN
                       </div>
-                      <h3 className="font-extrabold text-white text-base mt-0.5">
-                        {currentStep.dayTitle}
+                      <h3 className="font-extrabold text-base mt-0.5">
+                        <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                          {currentStep.dayTitle}
+                        </span>
                       </h3>
-                      <p className="text-xs text-white/50">{currentStep.categoryName}</p>
+                      <p className="text-xs text-sky-100/90 font-medium">{currentStep.categoryName}</p>
                     </div>
 
                     <div className="flex flex-col items-end">
@@ -1470,11 +1468,13 @@ export default function CyclonePage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <BarChart2 size={18} className="text-cyan-400" />
-                    <h3 className="font-black text-white text-base tracking-tight">
-                      Cyclone Intensification Trajectory: Current BOB-02 vs Historical Super Cyclones
+                    <h3 className="font-black text-base tracking-tight">
+                      <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                        Cyclone Intensification Trajectory: Current BOB-02 vs Historical Super Cyclones
+                      </span>
                     </h3>
                   </div>
-                  <p className="text-xs text-white/50 mt-0.5">
+                  <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                     Comparing timeline evolution over 7-Day cycle: Today (BOB-02) against Super Cyclone Amphan (2020), Mocha (2023), Fani (2019), and Biparjoy (2023)
                   </p>
                 </div>
@@ -1641,11 +1641,13 @@ export default function CyclonePage() {
             <div className="glass rounded-3xl p-6 border border-white/10 depth-shadow space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/10 pb-3">
                 <div>
-                  <h3 className="font-black text-white text-base flex items-center gap-2">
+                  <h3 className="font-black text-base flex items-center gap-2">
                     <Zap size={16} className="text-orange-400" />
-                    Physical Heat Potential &amp; Coastal Impact Comparison
+                    <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                      Physical Heat Potential &amp; Coastal Impact Comparison
+                    </span>
                   </h3>
-                  <p className="text-xs text-white/50 mt-0.5">
+                  <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                     Benchmarking Ocean Heat Content (OHC), 26°C Isotherm Depth (D26), Peak Wind, and Storm Surge
                   </p>
                 </div>
@@ -1750,11 +1752,13 @@ export default function CyclonePage() {
             <div className="glass rounded-3xl p-6 border border-cyan-500/30 depth-shadow space-y-3">
               <div className="flex items-center gap-2 text-cyan-400">
                 <Zap size={18} />
-                <h3 className="font-black text-white text-base">
-                  Why 0–1000m Subsurface Profile is Crucial for Cyclone Forecasting
+                <h3 className="font-black text-base">
+                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                    Why 0–1000m Subsurface Profile is Crucial for Cyclone Forecasting
+                  </span>
                 </h3>
               </div>
-              <p className="text-xs text-white/70 leading-relaxed max-w-4xl">
+              <p className="text-xs text-sky-100/90 font-medium leading-relaxed max-w-4xl">
                 Traditional weather satellites only observe the sea surface skin (top 1 millimeter). When a cyclone passes over water, 
                 its 150+ km/h winds produce intense cyclonic suction (Ekman pumping), violently churning the upper 100 meters. 
                 If warm water only exists as a thin surface skin, this upwelling immediately chills the ocean surface and extinguishes the cyclone. 
@@ -1798,9 +1802,11 @@ export default function CyclonePage() {
 
             {/* Subsurface Neural Reconstruction Explainer */}
             <div className="glass rounded-3xl p-6 border border-white/10 depth-shadow space-y-3">
-              <h4 className="font-bold text-white text-sm flex items-center gap-2">
+              <h4 className="font-bold text-sm flex items-center gap-2">
                 <Info size={16} className="text-cyan-400" />
-                How OCEANINTEL Reconstructs 0–1000m Profiles to Outperform Baseline Models
+                <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                  How OCEANINTEL Reconstructs 0–1000m Profiles to Outperform Baseline Models
+                </span>
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-white/70 leading-relaxed pt-2">
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
@@ -1837,6 +1843,15 @@ export default function CyclonePage() {
           </div>
         )}
       </PageContainer>
+  );
+
+  if (embedded) {
+    return pageContent;
+  }
+
+  return (
+    <PageLayout>
+      {pageContent}
     </PageLayout>
   );
 }

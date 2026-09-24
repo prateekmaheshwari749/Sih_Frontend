@@ -19,6 +19,8 @@ interface SatelliteMission {
   primaryParameter: string;
   color: string;
   orbitAlt: string;
+  temporalRes: string;
+  roleInModel: string;
 }
 
 const MISSIONS: SatelliteMission[] = [
@@ -26,37 +28,45 @@ const MISSIONS: SatelliteMission[] = [
     id: 'sentinel3',
     name: 'Sentinel-3 / AltiKa',
     agency: 'ESA / CNES / ISRO',
-    sensor: 'SRAL Synthetic Altimeter & SLSTR',
-    primaryParameter: 'SSH / SLA & SST',
+    sensor: 'SRAL Synthetic Altimeter & SLSTR Infrared Radiometer',
+    primaryParameter: 'Sea Surface Height (SSH/SLA) & Sea Surface Temperature (SST)',
     color: '#38bdf8',
     orbitAlt: '814 km (Polar Sun-Sync)',
+    temporalRes: '27-Day Repeat Cycle · NRT Ingestion within 3h',
+    roleInModel: 'Supplies high-precision Sea Level Anomaly (SLA) to locate mesoscale eddies and calculate thermocline displacement.',
   },
   {
     id: 'insat3d',
     name: 'INSAT-3DR / Oceansat-3',
     agency: 'ISRO (India)',
-    sensor: 'Ocean Colour Monitor & Thermal Sounder',
-    primaryParameter: 'SST & Surface Wind Vectors',
+    sensor: '19-Channel Sounder & Ocean Colour Monitor (OCM-3)',
+    primaryParameter: 'High-Frequency Thermal SST & Wind Scatterometry',
     color: '#f59e0b',
-    orbitAlt: '35,786 km (Geostationary)',
+    orbitAlt: '35,786 km (Geostationary Indian Ocean Slot)',
+    temporalRes: 'Continuous 15-Minute Rapid Refresh',
+    roleInModel: 'Delivers rapid sub-hourly sea surface thermal evolution over Arabian Sea & Bay of Bengal, capturing diurnal heat cycles.',
   },
   {
     id: 'smap',
     name: 'SMAP / SMOS',
     agency: 'NASA / ESA',
-    sensor: 'L-band Microwave Radiometer',
+    sensor: 'L-band (1.4 GHz) Conical-Scanning Microwave Radiometer',
     primaryParameter: 'Sea Surface Salinity (SSS)',
     color: '#10b981',
     orbitAlt: '685 km (Dawn-Dusk Orbit)',
+    temporalRes: '3-Day Global Ocean Map Refresh',
+    roleInModel: 'Quantifies freshwater runoff plumes from Ganges-Brahmaputra to reconstruct the salinity barrier layer that traps heat.',
   },
   {
     id: 'metop',
     name: 'MetOp-C / ASCAT',
     agency: 'EUMETSAT / NOAA',
-    sensor: 'C-band Radar Scatterometer',
-    primaryParameter: 'Ocean Surface Winds (U/V)',
+    sensor: 'C-band Radar Fan-Beam Scatterometer',
+    primaryParameter: 'Ocean Surface Winds & Stress Vectors (U/V)',
     color: '#a855f7',
-    orbitAlt: '817 km (Sun-Synchronous)',
+    orbitAlt: '817 km (Sun-Synchronous Polar)',
+    temporalRes: 'Twice-Daily Ocean Swath Coverage',
+    roleInModel: 'Provides wind-stress curl driving Ekman suction, Findlater Jet coastal upwelling, and turbulent mixed layer deepening.',
   },
 ];
 
@@ -218,10 +228,12 @@ export default function SatelliteReconstructionSimulation() {
               Photorealistic 3D Earth &amp; Satellite
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            How OCEANINTEL Works: Space Sensors to 1000m Depths
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm">
+            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+              How OCEANINTEL Works: Space Sensors to 1000m Depths
+            </span>
           </h2>
-          <p className="text-xs sm:text-sm text-white/60 max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-sky-100/90 font-medium max-w-2xl leading-relaxed">
             Satellites measure continuous 2D surface parameters (SST, SSS, SSH Altimetry, and Wind vectors). Our project&apos;s deep learning model ingests those parameters to reconstruct the complete 3D ocean temperature field (0–1000m across 15 depths).
           </p>
         </div>
@@ -279,7 +291,7 @@ export default function SatelliteReconstructionSimulation() {
       <div className="p-5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         
         {/* Left Column: 3D Photorealistic Earth & Satellite Scene (7 cols) */}
-        <div className="lg:col-span-7 rounded-2xl bg-[#010613] border border-cyan-500/20 relative overflow-hidden h-[420px] sm:h-[480px] flex flex-col justify-between shadow-2xl">
+        <div className="lg:col-span-7 rounded-2xl bg-[#010613] border border-cyan-500/20 relative overflow-hidden min-h-[580px] flex flex-col justify-between shadow-2xl">
           
           {/* Top-Left Floating Mission Telemetry Card */}
           <div className="absolute top-4 left-4 z-20 p-2.5 rounded-xl bg-black/75 border border-cyan-500/30 backdrop-blur-md max-w-xs space-y-1 font-mono text-xs">
@@ -325,32 +337,60 @@ export default function SatelliteReconstructionSimulation() {
             />
           </div>
 
-          {/* Bottom Telemetry HUD: The 4 Ingested Surface Parameters */}
-          <div className="relative z-10 mt-auto p-3 m-3 rounded-2xl bg-black/80 border border-white/10 backdrop-blur-xl grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-            <div className="p-2 rounded-xl bg-red-950/30 border border-red-500/30">
-              <span className="text-white/40 block text-[9px]">Thermal IR Radiometer (SST)</span>
-              <span className="text-red-400 font-bold text-sm">{activeRegion.sst.toFixed(1)} °C</span>
+          {/* Active Satellite Intelligence Dossier Card */}
+          <div className="relative z-10 mt-auto p-4 m-3 rounded-2xl bg-black/85 border border-cyan-500/40 backdrop-blur-xl space-y-2.5 text-xs font-mono shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/15">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-black font-black shadow-md"
+                  style={{ backgroundColor: activeMission.color }}
+                >
+                  <Satellite size={18} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                    <span>{activeMission.name}</span>
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold text-black"
+                      style={{ backgroundColor: activeMission.color }}
+                    >
+                      {activeMission.agency}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-cyan-200 mt-0.5">{activeMission.sensor}</p>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <span className="text-[10px] text-white/50 block">Orbit &amp; Altitude</span>
+                <span className="text-xs text-white font-semibold">{activeMission.orbitAlt}</span>
+              </div>
             </div>
 
-            <div className="p-2 rounded-xl bg-blue-950/30 border border-blue-500/30">
-              <span className="text-white/40 block text-[9px]">Radar Altimeter (SLA/SSH)</span>
-              <span className="text-blue-400 font-bold text-sm">{activeRegion.ssh > 0 ? `+${activeRegion.ssh}` : activeRegion.ssh} cm</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-0.5">
+                <span className="text-white/40 block text-[9.5px] uppercase tracking-wider">Observed Primary Parameter</span>
+                <span className="text-cyan-300 font-bold block">{activeMission.primaryParameter}</span>
+                <span className="text-[10px] text-emerald-400 font-mono">
+                  Active Ingest: {activeMission.id === 'sentinel3' ? `SSH ${activeRegion.ssh > 0 ? `+${activeRegion.ssh}` : activeRegion.ssh} cm, SST ${activeRegion.sst.toFixed(1)}°C` : activeMission.id === 'insat3d' ? `Thermal SST ${activeRegion.sst.toFixed(1)}°C, Winds ${activeRegion.wind} m/s` : activeMission.id === 'smap' ? `Salinity ${activeRegion.sss.toFixed(1)} PSU` : `Wind Vector ${activeRegion.wind} m/s`}
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-0.5">
+                <span className="text-white/40 block text-[9.5px] uppercase tracking-wider">AI Deep Learning Role</span>
+                <p className="text-sky-200 text-[10.5px] leading-relaxed">{activeMission.roleInModel}</p>
+              </div>
             </div>
 
-            <div className="p-2 rounded-xl bg-emerald-950/30 border border-emerald-500/30">
-              <span className="text-white/40 block text-[9px]">Microwave Salinity (SSS)</span>
-              <span className="text-emerald-400 font-bold text-sm">{activeRegion.sss.toFixed(1)} PSU</span>
-            </div>
-
-            <div className="p-2 rounded-xl bg-amber-950/30 border border-amber-500/30">
-              <span className="text-white/40 block text-[9px]">Scatterometer (Wind Vector)</span>
-              <span className="text-amber-400 font-bold text-sm">{activeRegion.wind} m/s</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/10 text-[10px] text-white/50">
+              <span>Temporal Resolution: <strong className="text-white">{activeMission.temporalRes}</strong></span>
+              <span>Target Basin: <strong className="text-cyan-300">{activeRegion.name}</strong></span>
             </div>
           </div>
         </div>
 
         {/* Right Column: AI Subsurface Temperature Reconstruction (5 cols) */}
-        <div className="lg:col-span-5 rounded-2xl light-panel-inner dark:bg-white/5 border border-white/10 p-5 space-y-4 flex flex-col justify-between">
+        <div className="lg:col-span-5 rounded-2xl light-panel-inner dark:bg-white/5 border border-white/10 p-5 space-y-4 flex flex-col justify-between min-h-[580px]">
           
           {/* Transformation Header */}
           <div className="flex items-center justify-between">

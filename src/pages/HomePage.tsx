@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useEffect, useState, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Waves,
@@ -17,689 +17,815 @@ import {
   Compass,
   CheckCircle2,
   Satellite,
+  Thermometer,
+  Droplets,
+  Flame,
+  Globe2,
+  Sliders,
+  Radio,
+  Sparkles,
+  Layers3,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import {
+  fetchHealth,
+  fetchModelInfo,
+  fetchMetricsSummary,
+} from '../api/oceanApi';
 
 import Navbar from '../components/Navbar';
 import SatelliteReconstructionSimulation from '../components/SatelliteReconstructionSimulation';
 import MonsoonFlowSimulation from '../components/MonsoonFlowSimulation';
-import NeuralSubsurfaceLab from '../components/NeuralSubsurfaceLab';
+import GovFooter from '../components/GovFooter';
+import DepthZoneCanvas from '../components/3d/DepthZoneCanvas';
 import IndiaFlag from '../components/IndiaFlag';
 
-/* ============================================================
-   UNDERWATER FISH SPRITE
-============================================================ */
-
-function FishSprite({
-  top,
-  left,
-  scale,
-  duration,
-  delay,
-  direction = 1,
-}: {
-  top: string;
-  left: string;
-  scale: number;
-  duration: number;
-  delay: number;
-  direction?: number;
-}) {
-  return (
-    <div
-      className="absolute pointer-events-none fish-swim"
-      style={{
-        top,
-        left,
-        animationDuration: `${duration}s`,
-        animationDelay: `${delay}s`,
-        transform: `scale(${scale * direction}, ${scale})`,
-      }}
-    >
-      <svg width="90" height="42" viewBox="0 0 90 42" fill="none">
-        <path
-          d="M14 21C25 8 43 5 58 12C65 15 70 19 75 21C70 23 65 27 58 30C43 37 25 34 14 21Z"
-          fill="rgba(121,210,225,0.22)"
-        />
-        <path d="M14 21L2 10L6 21L2 32L14 21Z" fill="rgba(89,190,211,0.20)" />
-        <path
-          d="M38 11C40 4 47 3 51 11"
-          stroke="rgba(180,235,240,0.22)"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <circle cx="61" cy="18" r="2" fill="rgba(220,250,255,0.55)" />
-      </svg>
-    </div>
-  );
-}
-
-function FishSchool() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <FishSprite top="20%" left="-12%" scale={0.75} duration={26} delay={0} />
-      <FishSprite top="45%" left="-16%" scale={0.5} duration={32} delay={-9} />
-      <FishSprite top="70%" left="-10%" scale={0.65} duration={29} delay={-15} />
-    </div>
-  );
-}
-
-function Bubbles() {
-  const bubbles = [
-    { left: '10%', size: 4, duration: 13, delay: 0 },
-    { left: '25%', size: 6, duration: 16, delay: -5 },
-    { left: '45%', size: 3, duration: 11, delay: -2 },
-    { left: '65%', size: 7, duration: 17, delay: -8 },
-    { left: '85%', size: 4, duration: 14, delay: -11 },
-  ];
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {bubbles.map((b, i) => (
-        <span
-          key={i}
-          className="water-bubble"
-          style={{
-            left: b.left,
-            width: `${b.size}px`,
-            height: `${b.size}px`,
-            animationDuration: `${b.duration}s`,
-            animationDelay: `${b.delay}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function LightRays() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div className="water-ray ray-one" />
-      <div className="water-ray ray-two" />
-      <div className="water-ray ray-three" />
-    </div>
-  );
-}
-
-function WaterBackground() {
-  return (
-    <>
-      <style>{`
-        @keyframes waterDrift {
-          0% { transform: translate3d(-3%, 0, 0) scale(1.05); }
-          50% { transform: translate3d(3%, 2%, 0) scale(1.10); }
-          100% { transform: translate3d(-3%, 0, 0) scale(1.05); }
-        }
-        @keyframes causticMove {
-          0% { transform: translate3d(-4%, -2%, 0) rotate(-2deg); }
-          50% { transform: translate3d(4%, 3%, 0) rotate(2deg); }
-          100% { transform: translate3d(-4%, -2%, 0) rotate(-2deg); }
-        }
-        @keyframes fishSwim {
-          0% { transform: translateX(-130px) translateY(0); }
-          50% { transform: translateX(55vw) translateY(12px); }
-          100% { transform: translateX(115vw) translateY(-6px); }
-        }
-        @keyframes bubbleRise {
-          0% { transform: translateY(110vh) scale(0.7); opacity: 0; }
-          10% { opacity: 0.3; }
-          50% { transform: translateY(50vh) scale(1); opacity: 0.2; }
-          100% { transform: translateY(-15vh) scale(1.2); opacity: 0; }
-        }
-        @keyframes rayMove {
-          0% { opacity: 0.04; transform: translateX(-15px) rotate(12deg); }
-          50% { opacity: 0.12; transform: translateX(15px) rotate(10deg); }
-          100% { opacity: 0.04; transform: translateX(-15px) rotate(12deg); }
-        }
-        .water-bubble {
-          position: absolute;
-          bottom: -20px;
-          border-radius: 9999px;
-          border: 1px solid rgba(160,235,245,0.2);
-          background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.3), transparent 70%);
-          animation: bubbleRise linear infinite;
-        }
-        .fish-swim {
-          animation-name: fishSwim;
-          animation-timing-function: linear;
-          animation-iteration-count: infinite;
-        }
-        .water-ray {
-          position: absolute;
-          top: -20%;
-          width: 25%;
-          height: 140%;
-          background: linear-gradient(90deg, transparent, rgba(125,225,235,0.08), transparent);
-          filter: blur(8px);
-          animation: rayMove 10s ease-in-out infinite;
-        }
-        .ray-one { left: 10%; animation-delay: -1s; }
-        .ray-two { left: 45%; animation-duration: 13s; animation-delay: -5s; }
-        .ray-three { right: 15%; animation-duration: 11s; animation-delay: -3s; }
-        .water-caustic {
-          position: absolute;
-          inset: -15%;
-          background:
-            radial-gradient(ellipse 20% 6% at 20% 25%, rgba(183,239,240,0.14), transparent 70%),
-            radial-gradient(ellipse 25% 7% at 55% 35%, rgba(110,215,225,0.12), transparent 70%),
-            radial-gradient(ellipse 22% 6% at 80% 20%, rgba(178,238,240,0.12), transparent 70%),
-            radial-gradient(ellipse 35% 8% at 35% 65%, rgba(77,192,208,0.10), transparent 70%);
-          filter: blur(8px);
-          animation: causticMove 20s ease-in-out infinite;
-        }
-      `}</style>
-
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#020b16] light-water-bg">
-        <div
-          className="absolute inset-0 light-water-gradient-hide"
-          style={{
-            background: `
-              radial-gradient(ellipse 100% 60% at 50% 0%, rgba(16,100,125,0.28), transparent 65%),
-              linear-gradient(180deg, #031421 0%, #031b2b 25%, #021522 55%, #010b15 80%, #01070d 100%)
-            `,
-          }}
-        />
-        <div className="water-caustic" />
-        <LightRays />
-        <FishSchool />
-        <Bubbles />
-      </div>
-    </>
-  );
-}
-
-function GlassCard({
+function AestheticWhiteCard({
   children,
   className = '',
-  glow = '#06b6d4',
+  hover = true,
 }: {
   children: ReactNode;
   className?: string;
-  glow?: string;
+  hover?: boolean;
 }) {
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border light-glass-card dark:bg-gradient-to-br dark:from-white/[0.07] dark:via-white/[0.02] dark:to-black/40 backdrop-blur-xl transition-all duration-300 ${className}`}
-      style={{
-        borderColor: `${glow}33`,
-        boxShadow: `0 10px 30px rgba(0,0,0,0.3), 0 0 25px ${glow}10`,
-      }}
+      className={`relative overflow-hidden rounded-3xl bg-white/[0.95] backdrop-blur-2xl border border-white/90 shadow-[0_16px_40px_rgba(0,10,30,0.22)] text-[#002f52] transition-all duration-300 ${hover
+        ? 'hover:shadow-[0_24px_50px_rgba(255,255,255,0.20)] hover:-translate-y-1 hover:border-white'
+        : ''
+        } ${className}`}
     >
-      <div
-        className="absolute top-0 left-0 right-0 h-px"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${glow}66, transparent)`,
-        }}
-      />
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-400 via-cyan-400 to-blue-500 opacity-90" />
       <div className="relative z-10">{children}</div>
     </div>
   );
 }
 
 /* ============================================================
-   MAIN HOMEPAGE (FLAGSHIP PORTAL & EXCLUSIVE SIMULATIONS)
+   DEPTH LAYERS CONFIGURATION (15 STANDARD DEPTHS TO 1000M)
+============================================================ */
+
+interface DepthLayer {
+  depth: number;
+  label: string;
+  temp: number;
+  zoneId: 'surface' | 'mixed' | 'thermocline' | 'meso' | 'deep';
+  color: string;
+  desc: string;
+}
+
+const DEPTH_LAYERS: DepthLayer[] = [
+  { depth: 0, label: 'Surface', temp: 30.1, zoneId: 'surface', color: '#ef4444', desc: 'Satellite-observed surface thermal boundary layer' },
+  { depth: 5, label: 'Near Surface', temp: 30.1, zoneId: 'surface', color: '#ef4444', desc: 'Upper mixed layer influenced by diurnal solar cycle' },
+  { depth: 10, label: 'Upper Mixed Layer', temp: 30.0, zoneId: 'surface', color: '#ef4444', desc: 'Active wind-stirred thermal boundary' },
+  { depth: 20, label: 'Mid Mixed Layer', temp: 29.9, zoneId: 'mixed', color: '#f97316', desc: 'Isothermal layer maintaining warm reservoir' },
+  { depth: 30, label: 'Mixed Layer Base (MLD)', temp: 29.7, zoneId: 'mixed', color: '#f97316', desc: 'Base of uniform temperature zone' },
+  { depth: 50, label: 'Upper Thermocline', temp: 28.3, zoneId: 'thermocline', color: '#eab308', desc: 'Onset of sharp vertical temperature decline' },
+  { depth: 75, label: 'D26 Isotherm Region', temp: 25.6, zoneId: 'thermocline', color: '#eab308', desc: 'Critical 26°C isotherm controlling cyclone OHC' },
+  { depth: 100, label: 'Thermocline Core', temp: 22.2, zoneId: 'thermocline', color: '#eab308', desc: 'Maximum vertical temperature gradient (dT/dz)' },
+  { depth: 125, label: 'Mid Thermocline', temp: 18.9, zoneId: 'thermocline', color: '#eab308', desc: 'Subsurface thermal gradient transition' },
+  { depth: 150, label: 'Lower Thermocline', temp: 16.3, zoneId: 'thermocline', color: '#eab308', desc: 'Transition into intermediate ocean layers' },
+  { depth: 200, label: 'Upper Mesopelagic', temp: 13.5, zoneId: 'meso', color: '#3b82f6', desc: 'Twilight zone with minimal solar penetration' },
+  { depth: 300, label: 'Mesopelagic Strata', temp: 11.4, zoneId: 'meso', color: '#3b82f6', desc: 'Intermediate ocean stability layer' },
+  { depth: 500, label: 'Mid Mesopelagic', temp: 9.8, zoneId: 'meso', color: '#3b82f6', desc: 'Deep intermediate water circulation' },
+  { depth: 700, label: 'Lower Mesopelagic', temp: 8.4, zoneId: 'deep', color: '#6366f1', desc: 'Cold deep ocean transition zone' },
+  { depth: 1000, label: 'Deep Ocean Abyssal', temp: 6.6, zoneId: 'deep', color: '#6366f1', desc: 'Cold abyssal reference layer extending to 1000m' },
+];
+
+/* ============================================================
+   5 SATELLITE INPUT VARIABLES DATA
+============================================================ */
+
+const SATELLITE_INPUTS = [
+  {
+    key: 'SST',
+    title: 'Sea Surface Temperature',
+    symbol: 'SST',
+    sensor: 'MODIS / VIIRS / Oceansat-3',
+    range: '24°C – 32°C',
+    role: 'Surface thermal boundary & heat source',
+    desc: 'Provides the thermal boundary condition at the ocean-atmosphere interface.',
+    icon: Thermometer,
+    color: '#0284c7',
+  },
+  {
+    key: 'SSS',
+    title: 'Sea Surface Salinity',
+    symbol: 'SSS',
+    sensor: 'SMAP / SMOS Microwave',
+    range: '30.0 – 36.8 PSU',
+    role: 'Controls density & barrier layer formation',
+    desc: 'Governs stratification, halocline strength, and freshwater cap dynamics.',
+    icon: Droplets,
+    color: '#0891b2',
+  },
+  {
+    key: 'SSH',
+    title: 'Sea Surface Height (SLA)',
+    symbol: 'SLA',
+    sensor: 'Sentinel-3 / AltiKa Altimeter',
+    range: '-30 cm to +35 cm',
+    role: 'Indicates thermocline depth & eddy pumping',
+    desc: 'Integrates vertical density structure; high SLA indicates depressed thermocline.',
+    icon: Globe2,
+    color: '#2563eb',
+  },
+  {
+    key: 'CURRENTS',
+    title: 'Ocean Surface Currents',
+    symbol: 'U, V',
+    sensor: 'Geostrophic Altimetry + Ekman Drift',
+    range: '0.1 – 1.8 m/s',
+    role: 'Horizontal heat & salinity advection',
+    desc: 'Captures dynamic boundary currents like Somali Current and seasonal gyres.',
+    icon: Compass,
+    color: '#4f46e5',
+  },
+  {
+    key: 'WIND',
+    title: 'ASCAT Surface Wind Vectors',
+    symbol: 'τx, τy',
+    sensor: 'MetOp-C / ASCAT Scatterometer',
+    range: '2 – 28 m/s',
+    role: 'Wind stress curl & Ekman upwelling',
+    desc: 'Drives surface mechanical mixing, MLD deepening, and coastal upwelling.',
+    icon: Wind,
+    color: '#0d9488',
+  },
+];
+
+/* ============================================================
+   DEEP LEARNING PIPELINE STEPS (01 - 04)
+============================================================ */
+
+const PIPELINE_STEPS = [
+  {
+    step: '01',
+    title: 'Multi-Satellite Sensor Fusion',
+    subtitle: 'Continuous 0.25° Grid Ingestion',
+    desc: 'Ingests real-time SST, SSS, SLA altimetry, and ASCAT wind fields on a uniform 0.25° grid across the North Indian Ocean basin.',
+    icon: Satellite,
+    tag: 'Surface Telemetry',
+  },
+  {
+    step: '02',
+    title: 'Spatial-Temporal Neural Encoder',
+    subtitle: 'Vision Transformers & ConvLSTM',
+    desc: 'Extracts multi-scale spatial gradients and mesoscale eddy textures while ConvLSTM captures thermal memory across seasonal monsoon cycles.',
+    icon: Cpu,
+    tag: 'Deep Features',
+  },
+  {
+    step: '03',
+    title: 'Physics-Informed Latent Space',
+    subtitle: 'Conservation Laws & Hydrostaticity',
+    desc: '128-dimensional continuous latent space regularized with hydrostatic equilibrium, upper ocean heat conservation, and stability constraints.',
+    icon: Zap,
+    tag: 'PINN Regularized',
+  },
+  {
+    step: '04',
+    title: '3D Volumetric Field Synthesis',
+    subtitle: '15 Standard Depths to 1,000m',
+    desc: 'Super-resolution decoder predicts 3D subsurface temperature fields at 15 depths, validated against INCOIS and ARGO float measurements.',
+    icon: Database,
+    tag: 'In-Situ Verified',
+  },
+];
+
+/* ============================================================
+   8 PLATFORM INTELLIGENCE MODULES
+============================================================ */
+
+const MODULES = [
+  {
+    title: '7-Day Subsurface Forecast',
+    desc: 'Project vertical strata & MLD evolution across the upcoming week.',
+    to: '/forecast',
+    icon: Calendar,
+    tag: 'Operational',
+  },
+  {
+    title: '3D Ocean Profile Explorer',
+    desc: 'Interactive 3D depth-level slab, volumetric voxels & horizontal slices.',
+    to: '/profile-3d',
+    icon: Layers,
+    tag: 'Interactive 3D',
+  },
+  {
+    title: 'Cyclone Intelligence & OHC',
+    desc: 'Tropical Cyclone Heat Potential (TCHP) & past cyclone track analysis.',
+    to: '/cyclone',
+    icon: Wind,
+    tag: 'Early Warning',
+  },
+  {
+    title: 'Ocean Heat & Barrier Layer',
+    desc: 'Subsurface thermal energy maps & salinity barrier layer thickness.',
+    to: '/ocean-heat',
+    icon: Flame,
+    tag: 'Climatology',
+  },
+  {
+    title: 'GLORYS12 Reanalysis Compare',
+    desc: 'Validate AI reconstruction against Copernicus GLORYS12 reanalysis.',
+    to: '/compare',
+    icon: GitCompare,
+    tag: 'Benchmarking',
+  },
+  {
+    title: 'ARGO Float Validation Hub',
+    desc: 'In-situ match-up metrics with per-depth RMSE, bias, and correlation.',
+    to: '/validation',
+    icon: CheckCircle2,
+    tag: 'Precision',
+  },
+  {
+    title: 'Live Satellite Observations',
+    desc: 'High-res SST, SSS, SSH Altimetry, and surface wind vector heatmaps.',
+    to: '/surface',
+    icon: Eye,
+    tag: 'Telemetry',
+  },
+  {
+    title: 'Ask X AI Assistant',
+    desc: 'Natural language oceanographic chat, depth queries & anomaly analysis.',
+    to: '/chat',
+    icon: MessageSquare,
+    tag: 'AI Intelligence',
+  },
+];
+
+/* ============================================================
+   MAIN HOMEPAGE (AESTHETIC WHITE WITH DARK BLUE ANIMATED BG)
 ============================================================ */
 
 export default function HomePage() {
   const navigate = useNavigate();
 
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+  const [modelInfo, setModelInfo] = useState<Record<string, unknown> | null>(null);
+  const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
+  const [selectedDepth, setSelectedDepth] = useState<number>(50);
+  const [activeHeroBtn, setActiveHeroBtn] = useState<'depth' | 'sat' | 'monsoon' | 'dashboard' | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBackendStatus = async () => {
+      try {
+        const [healthResult, modelResult, metricsResult] = await Promise.allSettled([
+          fetchHealth(),
+          fetchModelInfo(),
+          fetchMetricsSummary(),
+        ]);
+
+        if (cancelled) return;
+
+        setBackendConnected(healthResult.status === 'fulfilled');
+
+        if (modelResult.status === 'fulfilled') {
+          setModelInfo(modelResult.value as Record<string, unknown>);
+        }
+
+        if (metricsResult.status === 'fulfilled') {
+          setMetrics(metricsResult.value as unknown as Record<string, unknown>);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[HomePage] Backend status check failed:', error);
+          setBackendConnected(false);
+        }
+      }
+    };
+
+    loadBackendStatus();
+    const intervalId = window.setInterval(loadBackendStatus, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const selectedLayer = useMemo(() => {
+    let active = DEPTH_LAYERS[0];
+    for (const layer of DEPTH_LAYERS) {
+      if (layer.depth <= selectedDepth) {
+        active = layer;
+      } else {
+        break;
+      }
+    }
+    return active;
+  }, [selectedDepth]);
+
+  const getNumber = (...keys: string[]): number | null => {
+    const sources = [metrics, modelInfo].filter(Boolean) as Record<string, unknown>[];
+    for (const source of sources) {
+      for (const key of keys) {
+        const value = source[key];
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (typeof value === 'string') {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+    }
+    return null;
+  };
+
+  const getString = (...keys: string[]): string | null => {
+    const sources = [modelInfo, metrics].filter(Boolean) as Record<string, unknown>[];
+    for (const source of sources) {
+      for (const key of keys) {
+        const value = source[key];
+        if (typeof value === 'string' && value.trim()) return value;
+      }
+    }
+    return null;
+  };
+
+  const liveLatency = getNumber('inference_latency_ms', 'latency_ms', 'inference_latency', 'latency');
+  const liveDepthCount = getNumber('output_depths', 'depth_count', 'num_depths');
+  const liveModelName = getString('model', 'model_name', 'name', 'architecture');
+
   return (
-    <div className="min-h-screen bg-[#020917] light-page-root text-white overflow-x-hidden selection:bg-cyan-500/30">
-      {/* Living Atmospheric Background */}
-      <WaterBackground />
+    <div className="min-h-screen text-slate-900 overflow-x-hidden selection:bg-sky-500/30 relative">
+      {/* Common Ocean Background is mounted globally in App.tsx */}
+
 
       {/* Navigation Bar */}
       <Navbar />
 
-      {/* Main Content (Full Width Without Depth Bar) */}
-      <main className="relative z-10 pt-28 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-20 sm:space-y-24">
+      {/* Main Content (Aesthetic White on Dark Blue Ocean) */}
+      <main className="relative z-10 pt-8 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-16 sm:space-y-24">
 
         {/* ====================================================
             HERO SHOWCASE SECTION
         ==================================================== */}
-        <section className="relative pt-4 pb-8 space-y-8">
-          {/* Executive Header & Navigation Actions */}
-          <div className="text-center max-w-4xl mx-auto space-y-5">
-            {/* Sovereign & SIH Badges */}
-            <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-cyan-950/50 border border-cyan-500/30 text-xs font-mono backdrop-blur-xl shadow-[0_0_20px_rgba(6,182,212,0.15)]">
+        <section className="relative pt-4 pb-4 space-y-8">
+          <div className="text-center max-w-4xl mx-auto space-y-6">
+
+            {/* Sovereign & SIH Floating Glass Badge */}
+            <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/95 text-[#005088] border border-white shadow-[0_8px_25px_rgba(0,0,0,0.2)] text-xs font-mono backdrop-blur-xl">
               <IndiaFlag className="w-4 h-2.5" />
-              <span className="text-amber-300 font-bold">SIH 2026</span>
-              <span className="text-white/25">•</span>
-              <span className="text-cyan-200 font-medium">MoES &amp; INCOIS Aligned</span>
-              <span className="text-white/25">•</span>
-              <span className="text-emerald-300">NORTH INDIAN OCEAN</span>
+              <span className="text-[#005088] font-black">SIH 2026</span>
+              <span className="text-cyan-400 font-bold">•</span>
+              <span className="text-sky-950 font-bold">MoES &amp; INCOIS Aligned</span>
+              <span className="text-cyan-400 font-bold">•</span>
+              <span className="text-emerald-700 font-semibold">NORTH INDIAN OCEAN BASIN</span>
             </div>
 
             {/* Main Headline */}
-            <h1 className="text-4xl sm:text-5xl xl:text-6xl font-black leading-[1.1] tracking-tight">
-              <span
-                style={{
-                  background: 'linear-gradient(135deg, #38bdf8 0%, #06b6d4 40%, #a855f7 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                Space-to-Subsurface Ocean
+            <h1 className="text-4xl sm:text-6xl xl:text-7xl font-black leading-[1.08] tracking-tight drop-shadow-[0_4px_30px_rgba(255,255,255,0.22)]">
+              <span className="block bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                Space-to-Subsurface
               </span>
-              <br />
-              <span className="text-white">AI Temperature Reconstruction</span>
+              <span className="block bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                AI Ocean Temperature Reconstruction
+              </span>
             </h1>
 
             {/* Subtitle */}
-            <p className="text-white/70 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
-              Direct in-situ temperature floats remain sparse. <strong className="text-cyan-300 font-semibold">OCEANINTEL</strong> ingests multi-mission satellite parameters (SST, Salinity, Altimetry SLA, Wind) and applies physics-guided deep learning to predict the complete 3D subsurface temperature field from surface down to 1,000 meters.
+            <p className="text-sky-100 text-base sm:text-lg leading-relaxed max-w-3xl mx-auto drop-shadow-sm font-medium">
+              Direct in-situ temperature floats remain sparse. OCEANINTEL ingests multi-mission satellite parameters (SST, Salinity, Altimetry SLA, Wind) and applies physics-guided deep learning to predict the complete 3D subsurface temperature field from surface down to 1,000 meters across 15 standard depth layers.
             </p>
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
                 onClick={() => {
+                  setActiveHeroBtn('depth');
+                  const el = document.getElementById('depth-explorer-root');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'depth'
+                  ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
+                  : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
+                  }`}
+              >
+                <Layers3 size={17} className={activeHeroBtn === 'depth' ? 'text-cyan-300' : 'text-[#005088]'} />
+                Explore 3D Depths
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveHeroBtn('sat');
                   const el = document.getElementById('satellite-sim-root');
                   el?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm hover:scale-105 transition-all cursor-pointer shadow-lg"
-                style={{
-                  background: 'linear-gradient(135deg, #0891a7, #2563eb)',
-                  boxShadow: '0 0 25px rgba(6,182,212,0.35)',
-                }}
+                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'sat'
+                  ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
+                  : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
+                  }`}
               >
-                <Satellite size={16} />
+                <Satellite size={17} className={activeHeroBtn === 'sat' ? 'text-cyan-300' : 'text-[#005088]'} />
                 Satellite Telemetry Sim
               </button>
 
               <button
                 onClick={() => {
+                  setActiveHeroBtn('monsoon');
                   const el = document.getElementById('monsoon-simulation');
                   el?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm text-white hover:scale-105 transition-all cursor-pointer bg-white/5 border border-white/10 hover:bg-white/10"
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl font-bold text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'monsoon'
+                  ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
+                  : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
+                  }`}
               >
-                <Compass size={16} className="text-cyan-400" />
+                <Compass size={17} className={activeHeroBtn === 'monsoon' ? 'text-cyan-300' : 'text-[#005088]'} />
                 Monsoon Currents
               </button>
 
               <button
                 onClick={() => {
-                  const el = document.getElementById('neural-lab');
-                  el?.scrollIntoView({ behavior: 'smooth' });
+                  setActiveHeroBtn('dashboard');
+                  navigate('/dashboard');
                 }}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm text-white hover:scale-105 transition-all cursor-pointer bg-purple-950/40 border border-purple-500/30 hover:border-purple-400"
+                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'dashboard'
+                  ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
+                  : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
+                  }`}
               >
-                <Cpu size={16} className="text-purple-400" />
-                AI Neural Lab
-              </button>
-
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm text-white hover:scale-105 transition-all cursor-pointer bg-cyan-950/40 border border-cyan-500/30 hover:bg-cyan-900/40"
-              >
-                <LayoutDashboard size={16} className="text-cyan-400" />
+                <LayoutDashboard size={17} className={activeHeroBtn === 'dashboard' ? 'text-cyan-300' : 'text-[#005088]'} />
                 Open 3D Dashboard
               </button>
             </div>
 
-            {/* Key Architectural Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 max-w-3xl mx-auto">
+            {/* 3 Floating White Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 max-w-3xl mx-auto">
               {[
-                { label: 'Spatial Resolution', value: '0.25° × 0.25°', glow: '#06b6d4' },
-                { label: 'Vertical Strata', value: '15 Depths', glow: '#3b82f6' },
-                { label: 'Max Depth', value: '1,000 Metres', glow: '#8b5cf6' },
-                { label: 'Inference Latency', value: '< 5 ms', glow: '#10b981' },
-              ].map(({ label, value, glow }) => (
-                <GlassCard key={label} glow={glow} className="p-3 text-center">
-                  <p className="text-base sm:text-lg font-black font-mono text-white">
+                { label: 'Spatial Resolution', value: '0.25° × 0.25°', tag: 'High-Res Grid' },
+                {
+                  label: 'Vertical Strata',
+                  value: liveDepthCount ? `${liveDepthCount} Depths` : '15 Depths',
+                  tag: '0 to 1,000m',
+                },
+                { label: 'Max Subsurface Depth', value: '1,000 Metres', tag: 'Abyssal Reference' },
+              ].map(({ label, value, tag }) => (
+                <div
+                  key={label}
+                  className="rounded-2xl bg-white/95 border border-white shadow-[0_12px_32px_rgba(0,10,30,0.22)] p-4 text-center hover:scale-105 transition-transform backdrop-blur-xl"
+                >
+                  <p className="text-lg sm:text-xl font-black font-mono text-[#005088]">
                     {value}
                   </p>
-                  <p className="text-white/40 text-[10px] mt-0.5 uppercase tracking-wider">{label}</p>
-                </GlassCard>
+                  <p className="text-sky-950 font-bold text-xs mt-0.5">{label}</p>
+                  <span className="inline-block mt-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                    {tag}
+                  </span>
+                </div>
               ))}
             </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-xs font-mono text-cyan-100/90">
+              <span>
+                API STATUS:{' '}
+                <span className={backendConnected === true ? 'text-emerald-300 font-bold' : backendConnected === false ? 'text-red-300 font-bold' : 'text-amber-300'}>
+                  {backendConnected === true ? 'OPERATIONAL' : backendConnected === false ? 'OFFLINE' : 'CHECKING'}
+                </span>
+              </span>
+              {liveModelName && (
+                <>
+                  <span className="text-cyan-400/60">•</span>
+                  <span>
+                    ACTIVE ARCHITECTURE: <span className="text-white font-bold">{liveModelName}</span>
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ====================================================
+            SECTION 1: 3D SUBSURFACE DEPTH STRATUM EXPLORER
+        ==================================================== */}
+        <section id="depth-explorer-root" className="space-y-4 pt-4">
+          <div className="text-center max-w-3xl mx-auto space-y-2">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/30 text-xs font-mono text-white backdrop-blur-md">
+              <Layers size={13} className="text-cyan-300" />
+              PHYSICAL STRATIFICATION 01
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-black drop-shadow-md">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                Interactive 3D Subsurface Depth Stratum Explorer
+              </span>
+            </h2>
+            <p className="text-sm sm:text-base text-sky-100/90 leading-relaxed font-medium">
+              Explore how temperature drops dynamically across the 15 predicted depth layers from the warm surface down through the thermocline into the 1,000m abyss.
+            </p>
           </div>
 
-          {/* Interactive Satellite-to-Subsurface Temperature Simulation Showcase */}
-          <motion.div
-            id="satellite-sim-root"
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, ease: 'easeOut', delay: 0.15 }}
-            className="w-full relative"
-          >
+          <AestheticWhiteCard className="p-6 sm:p-8">
+            <div className="flex flex-col lg:flex-row items-stretch gap-6">
+
+              {/* Left Column: Extended Depth Level Selector List */}
+              <div className="w-full lg:w-5/12 flex flex-col space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-sky-100">
+                  <span className="text-xs font-bold text-sky-800 uppercase tracking-wider">Depth Level (0–1000m)</span>
+                  <span className="text-xs font-bold text-sky-800 uppercase tracking-wider">Predicted Temp</span>
+                </div>
+
+                <div className="space-y-1.5 overflow-y-auto max-h-[560px] pr-1.5">
+                  {DEPTH_LAYERS.map((layer) => {
+                    const isSelected = selectedLayer.depth === layer.depth;
+                    return (
+                      <button
+                        key={layer.depth}
+                        onClick={() => setSelectedDepth(layer.depth)}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-mono transition-all duration-200 cursor-pointer text-left ${isSelected
+                          ? 'bg-[#005088] text-white border-cyan-400 shadow-lg ring-1 ring-cyan-400/50'
+                          : 'bg-white border-sky-100 text-[#002f52] hover:bg-sky-50/80 hover:border-sky-200'
+                          }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full shrink-0 transition-transform ${isSelected ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] scale-110' : ''
+                              }`}
+                            style={{ backgroundColor: isSelected ? '#ffffff' : layer.color }}
+                          />
+                          <span className={`text-xs ${isSelected ? 'text-white font-bold' : 'text-[#002f52] font-semibold'}`}>
+                            {layer.depth} m ({layer.label})
+                          </span>
+                        </div>
+                        <span className={`font-black text-xs ${isSelected ? 'text-white' : 'text-[#005088]'}`}>
+                          {layer.temp.toFixed(1)}°C
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Column: Clean, Sensible Depth Zone Simulation */}
+              <div className="w-full lg:w-7/12 flex flex-col space-y-3">
+                {/* Top Telemetry Header */}
+                <div className="p-4 rounded-2xl bg-sky-50/60 border border-sky-100 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-sky-700 font-bold block">
+                      Active Subsurface Layer
+                    </span>
+                    <div className="text-xl font-black text-[#005088]">
+                      {selectedLayer.depth} m ({selectedLayer.label})
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase tracking-wider text-sky-600 block">Predicted Temp</span>
+                      <span className="text-lg font-black text-emerald-600">{selectedLayer.temp.toFixed(1)}°C</span>
+                    </div>
+                    <div className="text-right pl-3 border-l border-sky-200">
+                      <span className="text-[10px] uppercase tracking-wider text-sky-600 block">Ocean Zone</span>
+                      <span className="text-xs font-bold text-[#005088] uppercase block">
+                        {selectedLayer.zoneId === 'surface'
+                          ? 'Epipelagic Surface'
+                          : selectedLayer.zoneId === 'mixed'
+                            ? 'Mixed Layer'
+                            : selectedLayer.zoneId === 'thermocline'
+                              ? 'Thermocline Gradient'
+                              : selectedLayer.zoneId === 'meso'
+                                ? 'Mesopelagic Strata'
+                                : 'Abyssal Reference'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3D Depth Zone Simulation Viewport (Sensible & Framed) */}
+                <div className="relative rounded-2xl overflow-hidden border border-sky-200 bg-[#021324] h-[340px] shadow-md">
+                  <DepthZoneCanvas
+                    zoneId={selectedLayer.zoneId}
+                    color={selectedLayer.color}
+                  />
+                  <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono text-cyan-300 pointer-events-none flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span>3D Strata View · {selectedLayer.depth}m Depth</span>
+                  </div>
+                </div>
+
+                {/* Bottom Stratum Explanation */}
+                <div className="p-4 rounded-2xl bg-sky-50/60 border border-sky-100 space-y-1">
+                  <div className="flex items-center gap-2 text-sm font-bold text-[#002f52]">
+                    <Layers3 size={16} className="text-[#005088]" />
+                    <span>{selectedLayer.depth} m ({selectedLayer.label}) Stratum Dynamics</span>
+                  </div>
+                  <p className="text-xs text-sky-950/85 leading-relaxed">
+                    {selectedLayer.desc}. In the North Indian Ocean basin, this layer plays a critical role in thermal stratification, vertical heat transport, and cyclone intensity modulation.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </AestheticWhiteCard>
+        </section>
+
+        {/* ====================================================
+            SECTION 2: SATELLITE TELEMETRY REMOTE SENSING SIMULATION
+        ==================================================== */}
+        <section id="satellite-sim-root" className="space-y-4 pt-4">
+          <div className="text-center max-w-3xl mx-auto space-y-2">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/30 text-xs font-mono text-white backdrop-blur-md">
+              <Satellite size={13} className="text-cyan-300" />
+              SPACE REMOTE SENSING TELEMETRY 02
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-black drop-shadow-md">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                Interactive Satellite-to-Subsurface 3D Simulation
+              </span>
+            </h2>
+            <p className="text-sm sm:text-base text-sky-100/90 leading-relaxed font-medium">
+              Experience the photorealistic 3D Earth and real-time satellite telemetry ingestion from Sentinel-3, INSAT-3DR, SMAP, and MetOp-C scatterometers.
+            </p>
+          </div>
+
+          <AestheticWhiteCard className="p-4 sm:p-6">
             <SatelliteReconstructionSimulation />
-          </motion.div>
+          </AestheticWhiteCard>
         </section>
 
         {/* ====================================================
-            SIMULATION SECTION 1: MONSOON REVERSING CURRENTS
+            SECTION 3: 5 SATELLITE INPUT OBSERVATION PARAMETERS
         ==================================================== */}
-        <section id="monsoon-simulation" className="space-y-6 pt-6">
+        <section className="space-y-6 pt-4">
           <div className="text-center max-w-3xl mx-auto space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-xs font-mono text-cyan-300">
-              <Waves size={13} />
-              PHYSICAL OCEANOGRAPHY SIMULATION 01
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/30 text-xs font-mono text-white backdrop-blur-md">
+              <Database size={13} className="text-cyan-300" />
+              SATELLITE OBSERVATION SUITE 03
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black text-white">
-              Seasonal Monsoon Current Reversals &amp; Gyres
+            <h2 className="text-3xl sm:text-4xl font-black drop-shadow-md">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                The 5 Primary Satellite Input Parameters
+              </span>
             </h2>
-            <p className="text-sm sm:text-base text-white/60 leading-relaxed">
-              The North Indian Ocean is unique on Earth — it is the only ocean basin where boundary currents completely reverse direction twice a year under the influence of the monsoons.
+            <p className="text-sm sm:text-base text-sky-100/90 leading-relaxed font-medium">
+              Multi-sensor satellite fusion converts surface microwave, infrared, radar, and altimetry observables into 3D subsurface temperature intelligence.
             </p>
           </div>
 
-          {/* Interactive Simulation Component */}
-          <MonsoonFlowSimulation />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            {SATELLITE_INPUTS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <AestheticWhiteCard key={item.key} className="p-5 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#005088]">
+                        <Icon size={20} />
+                      </div>
+                      <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
+                        {item.symbol}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-bold text-[#002f52] leading-snug">{item.title}</h3>
+                      <p className="text-[10px] font-mono text-[#005088] font-bold mt-0.5">{item.sensor}</p>
+                    </div>
+
+                    <p className="text-xs text-sky-950/80 leading-relaxed">{item.desc}</p>
+                  </div>
+
+                  <div className="pt-2 border-t border-sky-100 flex items-center justify-between text-[11px]">
+                    <span className="text-sky-600 font-mono font-medium">Range: {item.range}</span>
+                    <span className="text-[#005088] font-semibold">{item.role.split('&')[0]}</span>
+                  </div>
+                </AestheticWhiteCard>
+              );
+            })}
+          </div>
         </section>
 
         {/* ====================================================
-            SIMULATION SECTION 2: NEURAL SUBSURFACE RECONSTRUCTION LAB
+            SECTION 4: END-TO-END DEEP LEARNING ARCHITECTURE
         ==================================================== */}
-        <section id="neural-lab" className="space-y-6 pt-6">
+        <section className="space-y-6 pt-4">
           <div className="text-center max-w-3xl mx-auto space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-xs font-mono text-purple-300">
-              <Cpu size={13} />
-              DEEP LEARNING SYNTHESIZER 02
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/30 text-xs font-mono text-white backdrop-blur-md">
+              <Cpu size={13} className="text-cyan-300" />
+              NEURAL INVERSION ARCHITECTURE 04
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black text-white">
-              Interactive Satellite-to-Subsurface Neural Lab
+            <h2 className="text-3xl sm:text-4xl font-black drop-shadow-md">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                Physics-Guided Deep Learning Pipeline
+              </span>
             </h2>
-            <p className="text-sm sm:text-base text-white/60 leading-relaxed">
-              Explore how multi-channel surface satellite variables pass through latent embedding layers to dynamically reconstruct the vertical thermocline, barrier layers, and Ocean Heat Content.
-            </p>
-          </div>
-
-          {/* Interactive Neural Lab Component */}
-          <NeuralSubsurfaceLab />
-        </section>
-
-        {/* ====================================================
-            SECTION 3: REGIONAL BASIN DYNAMICS COMPARISON
-        ==================================================== */}
-        <section className="space-y-6 pt-6">
-          <div className="text-center max-w-3xl mx-auto space-y-2">
-            <h2 className="text-3xl sm:text-4xl font-black text-white">
-              Two Contrasting Basins: Arabian Sea vs Bay of Bengal
-            </h2>
-            <p className="text-sm sm:text-base text-white/60 leading-relaxed">
-              The Indian subcontinent divides the northern basin into two distinct oceanographic worlds governed by unique salinity, evaporation, and wind stress balances.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Arabian Sea Basin */}
-            <GlassCard glow="#06b6d4" className="p-6 sm:p-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300">
-                    <Compass size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Arabian Sea</h3>
-                    <p className="text-xs text-white/50 font-mono">High Salinity · Intense Upwelling</p>
-                  </div>
-                </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
-                  Salinity: 35.5–36.8 PSU
-                </span>
-              </div>
-
-              <p className="text-sm text-white/70 leading-relaxed">
-                Dominated by strong evaporation exceeding precipitation, creating dense, highly saline waters. During the SW monsoon, the Findlater Jet drives intense Ekman pumping and coastal upwelling along the western boundary, lowering sea surface temperatures to &lt;21°C and enriching marine life.
-              </p>
-
-              <div className="grid grid-cols-2 gap-3 pt-2 text-xs font-mono">
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-                  <span className="text-white/40 block">Key Feature</span>
-                  <span className="text-white font-bold">Somali Upwelling Jet</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-                  <span className="text-white/40 block">Winter Regime</span>
-                  <span className="text-cyan-300 font-bold">Deep Convection (85m)</span>
-                </div>
-              </div>
-            </GlassCard>
-
-            {/* Bay of Bengal Basin */}
-            <GlassCard glow="#f97316" className="p-6 sm:p-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-400/30 flex items-center justify-center text-orange-300">
-                    <Waves size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Bay of Bengal</h3>
-                    <p className="text-xs text-white/50 font-mono">Low Salinity · Cyclone Incubator</p>
-                  </div>
-                </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-300 border border-orange-500/25">
-                  Salinity: 30.0–33.5 PSU
-                </span>
-              </div>
-
-              <p className="text-sm text-white/70 leading-relaxed">
-                Receives massive freshwater runoff (~1.6 × 10¹² m³/yr) from the Ganges, Brahmaputra, and Irrawaddy rivers. This light freshwater cap creates a strong halocline and shallow barrier layer that inhibits vertical mixing, keeping surface temperatures above 29°C and fueling rapid cyclone intensification.
-              </p>
-
-              <div className="grid grid-cols-2 gap-3 pt-2 text-xs font-mono">
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-                  <span className="text-white/40 block">Key Feature</span>
-                  <span className="text-white font-bold">Salinity Barrier Layer</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-                  <span className="text-white/40 block">Cyclone Hazard</span>
-                  <span className="text-orange-400 font-bold">High OHC (&gt;95 kJ/cm²)</span>
-                </div>
-              </div>
-            </GlassCard>
-          </div>
-        </section>
-
-        {/* ====================================================
-            SECTION 4: AI ARCHITECTURE PIPELINE
-        ==================================================== */}
-        <section className="space-y-8 pt-6">
-          <div className="text-center max-w-3xl mx-auto space-y-2">
-            <h2 className="text-3xl sm:text-4xl font-black text-white">
-              End-to-End Deep Learning Architecture
-            </h2>
-            <p className="text-sm sm:text-base text-white/60 leading-relaxed">
-              Bridging the gap between surface satellite sensors and deep 1000m in-situ profiles with physics-informed latent representations.
+            <p className="text-sm sm:text-base text-sky-100/90 leading-relaxed font-medium">
+              Bridging surface satellite telemetry with deep 1,000m thermal stratification using physics-informed neural network inversion.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                step: '01',
-                title: 'Surface Sensor Fusion',
-                desc: 'Multi-satellite continuous ingestion of SST (MODIS/VIIRS), SSS (SMAP/SMOS), SLA altimetry, and ASCAT surface wind vectors at 0.25° grid.',
-                icon: SatelliteIcon,
-                color: '#38bdf8',
-              },
-              {
-                step: '02',
-                title: 'Spatial-Temporal Encoder',
-                desc: 'Vision Transformers (ViT) and ResNet-50 extract multi-scale spatial textures while ConvLSTM captures memory of thermal evolution over time.',
-                icon: Cpu,
-                color: '#a855f7',
-              },
-              {
-                step: '03',
-                title: 'Physics-Informed Latent Space',
-                desc: '128-dimensional continuous latent space regularized with hydrostatic equilibrium and conservation of upper Ocean Heat Content.',
-                icon: Zap,
-                color: '#f59e0b',
-              },
-              {
-                step: '04',
-                title: '3D Volumetric Field Synthesis',
-                desc: 'Super-resolution decoder reconstructs temperatures across 15 standard depth levels (0–1000m), verified against INCOIS LAS ARGO floats.',
-                icon: Database,
-                color: '#10b981',
-              },
-            ].map(({ step, title, desc, icon: Icon, color }) => (
-              <GlassCard key={step} glow={color} className="p-6 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-black font-mono text-white/30">{step}</span>
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center"
-                    style={{ background: `${color}20`, border: `1px solid ${color}40` }}
-                  >
-                    <Icon size={18} style={{ color }} />
+            {PIPELINE_STEPS.map((step) => {
+              const Icon = step.icon;
+              return (
+                <AestheticWhiteCard key={step.step} className="p-6 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-black font-mono text-sky-300 font-extrabold">
+                      {step.step}
+                    </span>
+                    <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#005088]">
+                      <Icon size={18} />
+                    </div>
                   </div>
-                </div>
-                <h4 className="text-base font-bold text-white">{title}</h4>
-                <p className="text-xs text-white/60 leading-relaxed">{desc}</p>
-              </GlassCard>
-            ))}
+
+                  <div>
+                    <h4 className="text-base font-bold text-[#002f52] leading-snug">{step.title}</h4>
+                    <p className="text-[11px] font-mono text-[#005088] font-bold mt-0.5">{step.subtitle}</p>
+                  </div>
+
+                  <p className="text-xs text-sky-950/80 leading-relaxed">{step.desc}</p>
+
+                  <div className="pt-2 border-t border-sky-100">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 font-semibold">
+                      {step.tag}
+                    </span>
+                  </div>
+                </AestheticWhiteCard>
+              );
+            })}
           </div>
         </section>
 
         {/* ====================================================
-            SECTION 5: DIRECT ACCESS MODULES
+            SECTION 5: MONSOON FLOW SIMULATION
         ==================================================== */}
-        <section className="space-y-6 pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white">
+        <section id="monsoon-simulation" className="space-y-4 pt-4">
+          <div className="text-center max-w-3xl mx-auto space-y-2">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/30 text-xs font-mono text-white backdrop-blur-md">
+              <Waves size={13} className="text-cyan-300" />
+              DYNAMIC OCEAN CIRCULATION 05
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-black drop-shadow-md">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                Seasonal Monsoon Current Reversals &amp; Gyres
+              </span>
+            </h2>
+            <p className="text-sm sm:text-base text-sky-100/90 leading-relaxed font-medium">
+              The North Indian Ocean is the only basin where boundary currents completely reverse direction twice a year under the influence of the monsoons.
+            </p>
+          </div>
+
+          <AestheticWhiteCard className="p-4 sm:p-6">
+            <MonsoonFlowSimulation />
+          </AestheticWhiteCard>
+        </section>
+
+        {/* ====================================================
+            SECTION 6: PLATFORM INTELLIGENCE MODULES
+        ==================================================== */}
+        <section className="space-y-6 pt-4">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/30 text-xs font-mono text-white backdrop-blur-md mb-2">
+              <LayoutDashboard size={13} className="text-cyan-300" />
+              OPERATIONAL PORTAL 06
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black drop-shadow-md">
+              <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
                 Platform Intelligence Modules
-              </h2>
-              <p className="text-sm text-white/50">
-                Direct access to specialized operational ocean intelligence tools
-              </p>
-            </div>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-xs font-mono text-cyan-300 hover:text-cyan-200 flex items-center gap-1 cursor-pointer self-start sm:self-auto"
-            >
-              Open Full Dashboard Overview <ArrowRight size={13} />
-            </button>
+              </span>
+            </h2>
+            <p className="text-sm text-sky-100/90 font-medium">
+              Direct access to specialized operational ocean intelligence tools
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                title: '7-Day Forecast',
-                desc: 'Temporal projection of vertical strata & MLD evolution.',
-                to: '/forecast',
-                icon: Calendar,
-                glow: '#3b82f6',
-              },
-              {
-                title: 'Cyclone Early Warning',
-                desc: 'Photorealistic satellite simulation & past cyclone comparison.',
-                to: '/cyclone',
-                icon: Wind,
-                glow: '#ef4444',
-              },
-              {
-                title: '3D Ocean Profile',
-                desc: 'Interactive 3D depth-level slab & horizontal slices.',
-                to: '/map',
-                icon: Layers,
-                glow: '#06b6d4',
-              },
-              {
-                title: 'GLORYS Comparison',
-                desc: 'Model accuracy vs GLORYS12 global ocean reanalysis.',
-                to: '/compare',
-                icon: GitCompare,
-                glow: '#8b5cf6',
-              },
-              {
-                title: 'ARGO Float Validation',
-                desc: 'Per-depth RMSE, bias, and correlation benchmarks.',
-                to: '/validation',
-                icon: CheckCircle2,
-                glow: '#10b981',
-              },
-              {
-                title: 'Satellite Observations',
-                desc: 'Live high-resolution SST, SSS, SSH, and wind heatmaps.',
-                to: '/surface',
-                icon: Eye,
-                glow: '#f97316',
-              },
-              {
-                title: 'Input Data Hub',
-                desc: 'Upload NetCDF (.nc) satellite observation files.',
-                to: '/input',
-                icon: BarChart2,
-                glow: '#eab308',
-              },
-              {
-                title: 'Ask X AI Assistant',
-                desc: 'Natural language oceanographic chat & analysis.',
-                to: '/chat',
-                icon: MessageSquare,
-                glow: '#a855f7',
-              },
-            ].map(({ title, desc, to, icon: Icon, glow }) => (
+            {MODULES.map(({ title, desc, to, icon: Icon, tag }) => (
               <button
                 key={title}
                 onClick={() => navigate(to)}
                 className="text-left group cursor-pointer transition-all"
               >
-                <GlassCard glow={glow} className="p-5 h-full space-y-2.5">
+                <AestheticWhiteCard className="p-5 h-full space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
-                      style={{ background: `${glow}20`, border: `1px solid ${glow}40` }}
-                    >
-                      <Icon size={17} style={{ color: glow }} />
+                    <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#005088] transition-transform group-hover:scale-110">
+                      <Icon size={19} />
                     </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-semibold">
+                      {tag}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-[#002f52] group-hover:text-[#005088] transition-colors flex items-center justify-between">
+                    <span>{title}</span>
                     <ArrowRight
                       size={14}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ color: glow }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-[#005088]"
                     />
-                  </div>
-                  <h4 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
-                    {title}
                   </h4>
-                  <p className="text-xs text-white/50 leading-relaxed">{desc}</p>
-                </GlassCard>
+                  <p className="text-xs text-sky-950/80 leading-relaxed">{desc}</p>
+                </AestheticWhiteCard>
               </button>
             ))}
           </div>
         </section>
-
-        {/* ====================================================
-            FOOTER
-        ==================================================== */}
-        <footer className="pt-12 border-t border-white/10 text-center space-y-4">
-          <div className="inline-flex items-center gap-2 text-xs text-white/40 font-mono">
-            <IndiaFlag className="w-3.5 h-2" />
-            <span>Smart India Hackathon 2026 · Ministry of Earth Sciences (MoES)</span>
-          </div>
-          <p className="text-xs text-white/30 max-w-xl mx-auto">
-            North Indian Ocean Operational Subsurface Domain (5°N–30°N, 45°E–105°E) · 0.25° Spatial Resolution · 15 Standard Depths (0–1000m)
-          </p>
-          <div className="w-px h-8 bg-gradient-to-b from-cyan-500/30 to-transparent mx-auto" />
-        </footer>
       </main>
-    </div>
-  );
-}
 
-// Satellite Icon Helper
-function SatelliteIcon(props: any) {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M13 7 9 3 5 7l4 4" />
-      <path d="m17 11 4 4-4 4-4-4" />
-      <path d="m8 12 4 4" />
-      <path d="m16 8-4-4" />
-      <path d="M12 16a6 6 0 0 0 6-6" />
-    </svg>
+      {/* Sovereign MoES Government of India Footer */}
+      <GovFooter className="mt-8" />
+    </div>
   );
 }

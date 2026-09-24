@@ -807,7 +807,7 @@ export default function IndiaCycloneRadarMap() {
       </div>
 
       {/* ── Bottom Interactive Animation Playback & Scrubber Controls ── */}
-      <div className="p-4 sm:p-5 bg-[#020917] border-t border-white/10">
+      <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 text-slate-800 border-t border-white/10">
         <div className="flex flex-col gap-4">
           {/* Time Scrubber Slider with Milestones */}
           <div>

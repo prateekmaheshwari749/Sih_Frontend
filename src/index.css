@@ -14,6 +14,20 @@
     min-height: 100vh;
   }
 
+  /* ============================================================
+   DISABLE GLOBAL GOVERNMENT / ADVISORY TICKER
+   ============================================================ */
+
+  /* Yellow INCOIS-IMD advisory ticker */
+  div[class*="bg-[#fff9e6]"][class*="border-[#ffe082]"] {
+    display: none !important;
+  }
+
+  /* Dark operational/data-stream ticker */
+  div[class*="bg-[#002244]"][class*="border-blue-900"] {
+    display: none !important;
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -82,24 +96,24 @@
 
   .card-3d:hover {
     transform: translateY(-4px) rotateX(2deg);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(6,182,212,0.15);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(6, 182, 212, 0.15);
   }
 
   /* Depth shadow layers */
   .depth-shadow {
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.06) inset,
-      0 -1px 0 rgba(0,0,0,0.3) inset,
-      0 8px 32px rgba(0,0,0,0.4),
-      0 2px 8px rgba(0,0,0,0.3);
+      0 1px 0 rgba(255, 255, 255, 0.06) inset,
+      0 -1px 0 rgba(0, 0, 0, 0.3) inset,
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 2px 8px rgba(0, 0, 0, 0.3);
   }
 
   .depth-shadow-lg {
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.08) inset,
-      0 -2px 0 rgba(0,0,0,0.4) inset,
-      0 20px 60px rgba(0,0,0,0.5),
-      0 4px 16px rgba(0,0,0,0.4);
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 -2px 0 rgba(0, 0, 0, 0.4) inset,
+      0 20px 60px rgba(0, 0, 0, 0.5),
+      0 4px 16px rgba(0, 0, 0, 0.4);
   }
 
   .glow-cyan {
@@ -150,28 +164,59 @@
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeInLeft {
-  from { opacity: 0; transform: translateX(-20px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(100vh);
+  }
 }
 
 .fade-in-up {
@@ -183,7 +228,7 @@
 }
 
 .bg-grid {
-  background-image: 
+  background-image:
     linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
   background-size: 50px 50px;
@@ -191,7 +236,8 @@
 
 /* Unified Platform Tokens */
 .page-container {
-  max-width: 80rem; /* max-w-7xl */
+  max-width: 80rem;
+  /* max-w-7xl */
   margin-left: auto;
   margin-right: auto;
   padding-left: 1rem;
@@ -483,44 +529,44 @@ button[class*="bg-emerald-600"]:active {
 
 /* ============================================================
    LIGHT THEME CSS TOKENS
-   Single source of truth — used across Home, Dashboard, InputData
+   Single source of truth â€” used across Home, Dashboard, InputData
 ============================================================ */
 html.light {
   /* Backgrounds */
-  --bg-primary:    #e8f4fd;
-  --bg-secondary:  #ddeefa;
-  --bg-card:       rgba(255, 255, 255, 0.75);
+  --bg-primary: #e8f4fd;
+  --bg-secondary: #ddeefa;
+  --bg-card: rgba(255, 255, 255, 0.75);
   --bg-card-hover: rgba(255, 255, 255, 0.92);
 
   /* Glass */
-  --glass-bg:     rgba(255, 255, 255, 0.72);
+  --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(255, 255, 255, 0.55);
-  --glass-shadow: 0 8px 32px rgba(14, 116, 144, 0.10), inset 0 1px 0 rgba(255,255,255,0.95);
+  --glass-shadow: 0 8px 32px rgba(14, 116, 144, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95);
 
   /* Accent */
-  --accent-cyan:   #0891b2;
-  --accent-blue:   #1d4ed8;
+  --accent-cyan: #0891b2;
+  --accent-blue: #1d4ed8;
   --accent-indigo: #4f46e5;
 
   /* Text */
-  --text-primary:   #0f172a;
+  --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted:     #64748b;
+  --text-muted: #64748b;
 
   /* Shadows */
-  --shadow-sm:  0 4px 16px rgba(14, 116, 144, 0.08);
-  --shadow-md:  0 10px 35px rgba(14, 116, 144, 0.12);
-  --shadow-lg:  0 20px 60px rgba(14, 116, 144, 0.16);
+  --shadow-sm: 0 4px 16px rgba(14, 116, 144, 0.08);
+  --shadow-md: 0 10px 35px rgba(14, 116, 144, 0.12);
+  --shadow-lg: 0 20px 60px rgba(14, 116, 144, 0.16);
 }
 
 html.light body {
-  /* Premium ice-blue ocean gradient — matches Input Data page */
+  /* Radiant Sunlit Tropical Ocean â€” Bright, clean, crystal clear */
   background:
-    radial-gradient(ellipse 80% 50% at 20% 0%,   rgba(14, 165, 233, 0.14), transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 10%,  rgba(56, 189, 248, 0.10), transparent 55%),
-    radial-gradient(ellipse 50% 35% at 50% 100%, rgba(99, 179, 237, 0.10), transparent 60%),
-    linear-gradient(180deg, #ddf2fc 0%, #e8f7ff 30%, #eef9ff 60%, #f0faff 100%);
-  color: #0f172a;
+    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(56, 189, 248, 0.24), transparent 70%),
+    radial-gradient(ellipse 70% 35% at 85% 15%, rgba(14, 165, 233, 0.16), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 15% 40%, rgba(99, 179, 237, 0.14), transparent 55%),
+    linear-gradient(180deg, #f8fcff 0%, #f0f9ff 30%, #e1f3fe 75%, #f0f9ff 100%);
+  color: #091428;
   min-height: 100vh;
 }
 
@@ -536,24 +582,23 @@ html.light ::-webkit-scrollbar-thumb:hover {
   background: rgba(14, 165, 233, 0.60);
 }
 
-/* Glass & Card Surfaces (Light Mode) */
+/* Glass & Card Surfaces (Light Mode) â€” Ultra-Bright, Crisp Specular White */
 html.light .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.68) 100%) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 252, 255, 0.88) 100%) !important;
   backdrop-filter: blur(24px) saturate(190%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
-  border: 1px solid rgba(14, 165, 233, 0.26) !important;
+  border: 1px solid rgba(14, 165, 233, 0.28) !important;
   box-shadow:
-    0 10px 30px -4px rgba(14, 116, 144, 0.10),
-    0 0 1px 1px rgba(255, 255, 255, 0.90),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.98),
-    inset 0 -1px 0 0 rgba(14, 165, 233, 0.10) !important;
+    0 10px 30px -4px rgba(14, 116, 144, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.03),
+    inset 0 1px 0 0 #ffffff !important;
 }
 
 html.light .glass:hover {
-  border-color: rgba(14, 165, 233, 0.45) !important;
+  border-color: rgba(14, 165, 233, 0.55) !important;
   box-shadow:
-    0 16px 36px -4px rgba(14, 116, 144, 0.16),
-    0 0 20px rgba(14, 165, 233, 0.15),
+    0 16px 36px -4px rgba(14, 116, 144, 0.15),
+    0 0 24px rgba(14, 165, 233, 0.20),
     inset 0 1px 0 0 #ffffff !important;
 }
 
@@ -671,39 +716,93 @@ html.light button[class*="from-cyan-500"]:not(.btn-glass):active {
     inset 0 2px 4px rgba(0, 0, 0, 0.20) !important;
 }
 
-/* High Contrast Slate Text Overrides */
+/* High Contrast Slate Text Overrides â€” Crisp, deep, readable */
 html.light .text-white {
-  color: #0f172a;
+  color: #091428 !important;
 }
+
 html.light .text-white\/90 {
-  color: #0f172a;
+  color: #0f172a !important;
 }
+
 html.light .text-white\/80 {
-  color: #1e293b;
+  color: #1e293b !important;
 }
+
 html.light .text-white\/70 {
-  color: #334155;
+  color: #334155 !important;
 }
+
 html.light .text-white\/60 {
-  color: #475569;
+  color: #3b4e68 !important;
 }
+
 html.light .text-white\/50 {
-  color: #64748b;
+  color: #475569 !important;
 }
+
 html.light .text-white\/40 {
-  color: #64748b;
+  color: #52667e !important;
 }
+
+html.light .text-white\/35 {
+  color: #64748b !important;
+}
+
 html.light .text-white\/30 {
-  color: #94a3b8;
+  color: #64748b !important;
 }
+
+html.light .text-white\/20 {
+  color: #94a3b8 !important;
+}
+
 html.light .text-slate-400 {
   color: #475569;
 }
+
 html.light .text-slate-300 {
   color: #334155;
 }
+
 html.light .text-slate-200 {
   color: #1e293b;
+}
+
+/* Vivid, high-saturation colored accents in light mode */
+html.light .text-cyan-400,
+html.light .text-cyan-300 {
+  color: #0284c7 !important;
+}
+
+html.light .text-amber-400,
+html.light .text-amber-300 {
+  color: #d97706 !important;
+}
+
+html.light .text-emerald-400,
+html.light .text-emerald-300 {
+  color: #059669 !important;
+}
+
+html.light .text-red-400,
+html.light .text-red-300 {
+  color: #dc2626 !important;
+}
+
+html.light .text-purple-400,
+html.light .text-purple-300 {
+  color: #7c3aed !important;
+}
+
+html.light .text-teal-400,
+html.light .text-teal-300 {
+  color: #0d9488 !important;
+}
+
+html.light .text-orange-400,
+html.light .text-orange-300 {
+  color: #ea580c !important;
 }
 
 /* Maintain crisp white text inside solid colored badges, buttons and gradients */
@@ -766,8 +865,11 @@ html.light .hover\:bg-white\/10:hover {
 html.light .bg-black\/20,
 html.light .bg-black\/30,
 html.light .bg-black\/40,
-html.light .bg-black\/50 {
-  background-color: rgba(240, 249, 255, 0.65);
+html.light .bg-black\/50,
+html.light .bg-black\/60 {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(14, 165, 233, 0.25) !important;
+  box-shadow: 0 10px 30px -4px rgba(14, 116, 144, 0.08) !important;
 }
 
 html.light .bg-\[\#020917\],
@@ -781,20 +883,18 @@ html.light .bg-\[\#010613\],
 html.light .bg-\[\#010915\],
 html.light .bg-\[\#04162e\],
 html.light .bg-\[\#020d1c\] {
-  background-color: rgba(240, 249, 255, 0.82) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: linear-gradient(180deg, #f8fcff 0%, #f0f9ff 35%, #e1f3fe 75%, #f0f9ff 100%) !important;
 }
 
-/* Hero canvas container (dark bg behind 3D Earth) — keep it dark in light mode */
+/* Hero canvas container (dark bg behind 3D Earth) â€” keep it dark in light mode */
 html.light .bg-\[\#01050e\] canvas,
 html.light [class*="bg-\\[\#01"] canvas {
-  /* Three.js canvas — preserve dark space scene regardless of mode */
+  /* Three.js canvas â€” preserve dark space scene regardless of mode */
   background: #01050e !important;
 }
 
 html.light .bg-grid {
-  background-image: 
+  background-image:
     linear-gradient(rgba(14, 165, 233, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
 }
@@ -820,21 +920,24 @@ html.light textarea:focus {
   box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25) !important;
 }
 
-/* ─── Decorative underwater elements — softer in light mode ───────────────── */
+/* â”€â”€â”€ Decorative underwater elements â€” softer in light mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light .water-ray {
   opacity: 0.35;
 }
+
 html.light .fish-swim {
   opacity: 0.20;
 }
+
 html.light .water-bubble {
   opacity: 0.18;
 }
+
 html.light .water-caustic {
   opacity: 0.30;
 }
 
-/* ─── Navbar in light mode — frosted glass strip ──────────────────────────── */
+/* â”€â”€â”€ Navbar in light mode â€” frosted glass strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light nav,
 html.light header {
   background: rgba(240, 249, 255, 0.82) !important;
@@ -844,7 +947,7 @@ html.light header {
   box-shadow: 0 2px 20px rgba(14, 116, 144, 0.08) !important;
 }
 
-/* ─── Hero / stats metric cards ───────────────────────────────────────────── */
+/* â”€â”€â”€ Hero / stats metric cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light .bg-gradient-to-br.from-white\/\[0\.07\] {
   background: rgba(255, 255, 255, 0.75) !important;
   backdrop-filter: blur(18px) saturate(180%) !important;
@@ -853,7 +956,7 @@ html.light .bg-gradient-to-br.from-white\/\[0\.07\] {
   box-shadow: 0 10px 35px rgba(14, 116, 144, 0.09) !important;
 }
 
-/* ─── Hardcoded black/dark panel overrides ────────────────────────────────── */
+/* â”€â”€â”€ Hardcoded black/dark panel overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light .bg-black\/60,
 html.light .bg-black\/70,
 html.light .bg-black\/75,
@@ -863,25 +966,25 @@ html.light .bg-black\/80 {
   -webkit-backdrop-filter: blur(16px);
 }
 
-/* Bottom telemetry HUD on Earth scene — keep readable on dark canvas */
+/* Bottom telemetry HUD on Earth scene â€” keep readable on dark canvas */
 html.light .bg-black\/80.backdrop-blur-xl {
   background-color: rgba(10, 25, 50, 0.88) !important;
 }
 
-/* ─── Dashboard widget containers ─────────────────────────────────────────── */
+/* â”€â”€â”€ Dashboard widget containers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light .bg-white\/5.border {
   background: rgba(255, 255, 255, 0.68) !important;
   border-color: rgba(14, 165, 233, 0.22) !important;
   box-shadow: 0 8px 28px rgba(14, 116, 144, 0.08) !important;
 }
 
-/* ─── Gradient text — brighter in light mode ──────────────────────────────── */
+/* â”€â”€â”€ Gradient text â€” brighter in light mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light [style*="WebkitTextFillColor: transparent"],
 html.light [style*="-webkit-text-fill-color: transparent"] {
   filter: brightness(0.80) saturate(1.3);
 }
 
-/* ─── radar-map-panel in light mode ───────────────────────────────────────── */
+/* â”€â”€â”€ radar-map-panel in light mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 html.light .radar-map-panel {
   background: rgba(255, 255, 255, 0.80) !important;
   border-color: rgba(14, 165, 233, 0.30) !important;
@@ -896,13 +999,13 @@ html.light .radar-map-panel {
    Tailwind dark: variants and hardcoded dark values).
 ============================================================ */
 
-/* Page root — overrides bg-[#020917] on the outermost div */
+/* Page root â€” overrides bg-[#020917] on the outermost div */
 html.light .light-page-root {
   background: transparent !important;
   color: #0f172a !important;
 }
 
-/* Fixed water background layer — replace the dark ocean with light ambience */
+/* Fixed water background layer â€” replace the dark ocean with light ambience */
 html.light .light-water-bg {
   background-color: transparent !important;
 }
@@ -915,12 +1018,10 @@ html.light .light-water-gradient-hide {
 
 /* Main outer hero panel (replaces from-[#04162e] via-[#020d1c] to-[#010612] gradient) */
 html.light .light-panel {
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.88) 0%,
-    rgba(236, 252, 255, 0.82) 50%,
-    rgba(224, 246, 255, 0.78) 100%
-  ) !important;
+  background: linear-gradient(145deg,
+      rgba(255, 255, 255, 0.88) 0%,
+      rgba(236, 252, 255, 0.82) 50%,
+      rgba(224, 246, 255, 0.78) 100%) !important;
   backdrop-filter: blur(24px) saturate(190%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
   border-color: rgba(14, 165, 233, 0.28) !important;
@@ -985,6 +1086,7 @@ html.light .light-depth-via {
   --tw-gradient-via: rgba(236, 250, 255, 0.90) !important;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to, rgba(236, 250, 255, 0)) !important;
 }
+
 html.light .light-depth-to {
   --tw-gradient-to: rgba(240, 249, 255, 0.95) !important;
 }
@@ -996,12 +1098,12 @@ html.light .light-glass-card * {
   --tw-text-opacity: 1;
 }
 
-/* Inline-style dark gradients behind water scene — hidden in light */
-html.light .light-water-bg > div[style] {
+/* Inline-style dark gradients behind water scene â€” hidden in light */
+html.light .light-water-bg>div[style] {
   opacity: 0 !important;
 }
 
-/* Fish, seaweed and caustics — visible but subtle */
+/* Fish, seaweed and caustics â€” visible but subtle */
 html.light .light-water-bg .fish-swim,
 html.light .light-water-bg canvas {
   opacity: 0.18 !important;
@@ -1011,12 +1113,12 @@ html.light .light-water-bg canvas {
    DASHBOARD LIGHT MODE REPAIR SYSTEM
 ============================================================ */
 
-/* ── Dark Mode Preserver: .dark-panel definition ── */
+/* â”€â”€ Dark Mode Preserver: .dark-panel definition â”€â”€ */
 .dark-panel {
   background: linear-gradient(180deg, #04162e 0%, #020d1c 50%, #010612 100%);
 }
 
-/* ── 1. Left Depth Slider / Meter (Light Mode) ── */
+/* â”€â”€ 1. Left Depth Slider / Meter (Light Mode) â”€â”€ */
 html.light .depth-meter-bg {
   background: rgba(255, 255, 255, 0.78) !important;
   backdrop-filter: blur(18px) saturate(180%) !important;
@@ -1055,7 +1157,7 @@ html.light .depth-meter-unit {
   color: #64748b !important;
 }
 
-/* ── 2. Action Buttons (Secondary Frosted Glass) ── */
+/* â”€â”€ 2. Action Buttons (Secondary Frosted Glass) â”€â”€ */
 html.light .light-btn-secondary {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(18px) saturate(180%) !important;
@@ -1072,7 +1174,7 @@ html.light .light-btn-secondary:hover {
   box-shadow: 0 8px 24px rgba(14, 116, 144, 0.14), 0 0 16px rgba(14, 165, 233, 0.18) !important;
 }
 
-/* ── 3. Metric Cards (Hero) ── */
+/* â”€â”€ 3. Metric Cards (Hero) â”€â”€ */
 html.light .light-hero-metric {
   background: rgba(255, 255, 255, 0.82) !important;
   backdrop-filter: blur(20px) saturate(190%) !important;
@@ -1103,7 +1205,7 @@ html.light .light-hero-metric .light-metric-label {
   font-weight: 600 !important;
 }
 
-/* ── 4. General PrismCard in Light Mode ── */
+/* â”€â”€ 4. General PrismCard in Light Mode â”€â”€ */
 html.light .prism-card {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(240, 249, 255, 0.72) 100%) !important;
   backdrop-filter: blur(20px) saturate(180%) !important;
@@ -1128,7 +1230,7 @@ html.light .prism-card-edge {
   background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.35), transparent) !important;
 }
 
-/* ── 5. Hero UI Surface Overrides ── */
+/* â”€â”€ 5. Hero UI Surface Overrides â”€â”€ */
 html.light .light-hero-status {
   background: rgba(255, 255, 255, 0.80) !important;
   border: 1px solid rgba(14, 165, 233, 0.35) !important;
@@ -1174,8 +1276,8 @@ html.light .light-suite-pill-inactive:hover {
   background: rgba(14, 165, 233, 0.12) !important;
 }
 
-/* ── 6. Continuous Underwater Transition (0m -> 1000m) ── */
-/* Zone 0: Surface (0m) — Sunlit surface waters */
+/* â”€â”€ 6. Continuous Underwater Transition (0m -> 1000m) â”€â”€ */
+/* Zone 0: Surface (0m) â€” Sunlit surface waters */
 html.light .depth-zone-surface {
   background: linear-gradient(180deg, #e8f7ff 0%, #def2fc 40%, #cdebf8 100%) !important;
 }
@@ -1204,7 +1306,7 @@ html.light .depth-zone-surface .zone-depth-label {
   color: #64748b !important;
 }
 
-/* Zone 1: Mixed Layer (30m) — Soft cyan fade */
+/* Zone 1: Mixed Layer (30m) â€” Soft cyan fade */
 html.light .depth-zone-mixed {
   background: linear-gradient(180deg, #cdebf8 0%, #b8e4f5 40%, #90d3ee 100%) !important;
 }
@@ -1233,7 +1335,7 @@ html.light .depth-zone-mixed .zone-depth-label {
   color: #475569 !important;
 }
 
-/* Zone 2: Thermocline (100m) — Mid-ocean azure transition */
+/* Zone 2: Thermocline (100m) â€” Mid-ocean azure transition */
 html.light .depth-zone-thermocline {
   background: linear-gradient(180deg, #90d3ee 0%, #5ebfe6 35%, #299ed3 70%, #0e78b2 100%) !important;
 }
@@ -1263,7 +1365,7 @@ html.light .depth-zone-thermocline .zone-depth-label {
   color: #e0f2fe !important;
 }
 
-/* Zone 3: Mesopelagic (300m) — Twilight realm descending to deep navy */
+/* Zone 3: Mesopelagic (300m) â€” Twilight realm descending to deep navy */
 html.light .depth-zone-meso {
   background: linear-gradient(180deg, #0e78b2 0%, #09598c 35%, #053b65 70%, #032442 100%) !important;
 }
@@ -1299,7 +1401,7 @@ html.light .depth-zone-meso .prism-card .zone-fact-value {
   color: #f8fafc !important;
 }
 
-/* Zone 4: Deep Ocean (700m–1000m) — Abyssal Midnight Ocean */
+/* Zone 4: Deep Ocean (700mâ€“1000m) â€” Abyssal Midnight Ocean */
 html.light .depth-zone-deep {
   background: linear-gradient(180deg, #032442 0%, #02172d 35%, #021020 70%, #010a15 100%) !important;
 }
@@ -1335,7 +1437,7 @@ html.light .depth-zone-deep .prism-card .zone-fact-value {
   color: #f8fafc !important;
 }
 
-/* ── 7. Platform Modules / 1000m Abyssal Section ── */
+/* â”€â”€ 7. Platform Modules / 1000m Abyssal Section â”€â”€ */
 html.light .platform-modules-section {
   background: linear-gradient(180deg, #010a15 0%, #010812 50%, #01050e 100%) !important;
   border-top: 1px solid rgba(14, 165, 233, 0.20) !important;
@@ -1377,7 +1479,7 @@ html.light .platform-modules-section .prism-card p {
   color: #94a3b8 !important;
 }
 
-/* ── 8. 3D Simulation Panel (OceanHeroCanvas Container & HUD) ── */
+/* â”€â”€ 8. 3D Simulation Panel (OceanHeroCanvas Container & HUD) â”€â”€ */
 html.light .ocean-hero-canvas-frame {
   border: 1px solid rgba(14, 165, 233, 0.35) !important;
   box-shadow:
@@ -1432,7 +1534,7 @@ html.light .ocean-canvas-hint {
   color: #64748b !important;
 }
 
-/* ── 9. Operational Telemetry & GlowCard in Light Mode ── */
+/* â”€â”€ 9. Operational Telemetry & GlowCard in Light Mode â”€â”€ */
 html.light .light-glow-card {
   background: rgba(255, 255, 255, 0.82) !important;
   backdrop-filter: blur(20px) saturate(180%) !important;
@@ -1488,9 +1590,9 @@ button,
 a.btn,
 [role="button"] {
   transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
-              filter 0.22s ease,
-              border-color 0.22s ease !important;
+    box-shadow 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    filter 0.22s ease,
+    border-color 0.22s ease !important;
   transform-origin: center center;
   position: relative;
 }
@@ -1504,8 +1606,8 @@ a.btn:hover,
 [role="button"]:hover {
   transform: translateY(-4px) scale(1.058) perspective(600px) translateZ(12px) !important;
   box-shadow: 0 14px 30px -4px rgba(6, 182, 212, 0.45),
-              0 6px 16px rgba(0, 0, 0, 0.55),
-              inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+    0 6px 16px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
   filter: brightness(1.12) !important;
   z-index: 25 !important;
 }
@@ -1531,9 +1633,9 @@ button:active,
 div[class*="GlowCard"] {
   position: relative;
   transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
-              border-color 0.28s ease,
-              filter 0.28s ease !important;
+    box-shadow 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.28s ease,
+    filter 0.28s ease !important;
   transform-origin: center center;
 }
 
@@ -1546,8 +1648,8 @@ div[class*="GlowCard"] {
 div[class*="GlowCard"]:hover {
   transform: translateY(-8px) scale(1.055) perspective(1000px) translateZ(18px) !important;
   box-shadow: 0 24px 50px -10px rgba(0, 0, 0, 0.75),
-              0 0 32px var(--card-glow, rgba(6, 182, 212, 0.4)),
-              inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    0 0 32px var(--card-glow, rgba(6, 182, 212, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
   border-color: var(--card-glow, rgba(6, 182, 212, 0.7)) !important;
   filter: brightness(1.08) !important;
   z-index: 35 !important;
@@ -1557,16 +1659,16 @@ div[class*="GlowCard"]:hover {
 .glass-panel {
   position: relative;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-              border-color 0.25s ease !important;
+    box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.25s ease !important;
   transform-origin: center center;
 }
 
 .glass-panel:hover {
   transform: translateY(-6px) scale(1.035) !important;
   box-shadow: 0 22px 48px -10px rgba(0, 0, 0, 0.7),
-              0 0 28px rgba(6, 182, 212, 0.3),
-              inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
+    0 0 28px rgba(6, 182, 212, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
   border-color: rgba(6, 182, 212, 0.5) !important;
   z-index: 25 !important;
 }
@@ -1590,6 +1692,7 @@ div[class*="GlowCard"]:hover {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(-360deg);
   }
@@ -1599,16 +1702,20 @@ div[class*="GlowCard"]:hover {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
 @keyframes pulse-eyewall-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(0.92);
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.6), inset 0 0 8px rgba(239, 68, 68, 0.4);
   }
+
   50% {
     transform: scale(1.14);
     box-shadow: 0 0 26px rgba(239, 68, 68, 0.95), 0 0 45px rgba(220, 38, 38, 0.6), inset 0 0 14px rgba(255, 255, 255, 0.8);
@@ -1616,24 +1723,31 @@ div[class*="GlowCard"]:hover {
 }
 
 @keyframes convective-lightning {
-  0%, 90%, 100% {
+
+  0%,
+  90%,
+  100% {
     opacity: 0;
     transform: scale(0.8);
   }
+
   92% {
     opacity: 1;
     transform: scale(1.3);
     filter: drop-shadow(0 0 10px #38bdf8);
   }
+
   94% {
     opacity: 0.2;
     transform: scale(0.9);
   }
+
   96% {
     opacity: 0.9;
     transform: scale(1.2);
     filter: drop-shadow(0 0 12px #facc15);
   }
+
   98% {
     opacity: 0;
   }
@@ -1650,9 +1764,11 @@ div[class*="GlowCard"]:hover {
     transform: scale(0.5);
     opacity: 0.9;
   }
+
   50% {
     opacity: 0.6;
   }
+
   100% {
     transform: scale(2.8);
     opacity: 0;
@@ -1660,11 +1776,14 @@ div[class*="GlowCard"]:hover {
 }
 
 @keyframes coastal-strike-alert {
-  0%, 100% {
+
+  0%,
+  100% {
     background-color: rgba(239, 68, 68, 0.15);
     border-color: rgba(239, 68, 68, 0.5);
     box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
   }
+
   50% {
     background-color: rgba(239, 68, 68, 0.35);
     border-color: rgba(239, 68, 68, 0.95);
@@ -1723,45 +1842,116 @@ div[class*="GlowCard"]:hover {
 }
 
 @keyframes wave-swell {
-  0% { transform: translateX(0) translateZ(0) scaleY(1); }
-  50% { transform: translateX(-25%) translateZ(0) scaleY(1.22); }
-  100% { transform: translateX(-50%) translateZ(0) scaleY(1); }
+  0% {
+    transform: translateX(0) translateZ(0) scaleY(1);
+  }
+
+  50% {
+    transform: translateX(-25%) translateZ(0) scaleY(1.22);
+  }
+
+  100% {
+    transform: translateX(-50%) translateZ(0) scaleY(1);
+  }
 }
 
 @keyframes wave-swell-secondary {
-  0% { transform: translateX(0) translateZ(0) scaleY(1); }
-  50% { transform: translateX(-35%) translateZ(0) scaleY(0.82); }
-  100% { transform: translateX(-70%) translateZ(0) scaleY(1); }
+  0% {
+    transform: translateX(0) translateZ(0) scaleY(1);
+  }
+
+  50% {
+    transform: translateX(-35%) translateZ(0) scaleY(0.82);
+  }
+
+  100% {
+    transform: translateX(-70%) translateZ(0) scaleY(1);
+  }
 }
 
 @keyframes needle-jitter {
-  0%, 100% { transform: rotate(var(--needle-deg, 0deg)); }
-  25% { transform: rotate(calc(var(--needle-deg, 0deg) + 2.5deg)); }
-  50% { transform: rotate(calc(var(--needle-deg, 0deg) - 1.8deg)); }
-  75% { transform: rotate(calc(var(--needle-deg, 0deg) + 1.2deg)); }
+
+  0%,
+  100% {
+    transform: rotate(var(--needle-deg, 0deg));
+  }
+
+  25% {
+    transform: rotate(calc(var(--needle-deg, 0deg) + 2.5deg));
+  }
+
+  50% {
+    transform: rotate(calc(var(--needle-deg, 0deg) - 1.8deg));
+  }
+
+  75% {
+    transform: rotate(calc(var(--needle-deg, 0deg) + 1.2deg));
+  }
 }
 
 @keyframes radar-pulse-wave {
-  0% { transform: scale(0.1); opacity: 0.9; }
-  70% { opacity: 0.35; }
-  100% { transform: scale(3.5); opacity: 0; }
+  0% {
+    transform: scale(0.1);
+    opacity: 0.9;
+  }
+
+  70% {
+    opacity: 0.35;
+  }
+
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+  }
 }
 
 @keyframes red-alert-flash {
-  0%, 100% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
-  50% { border-color: rgba(239, 68, 68, 0.95); box-shadow: 0 0 35px rgba(239, 68, 68, 0.65), inset 0 0 20px rgba(239, 68, 68, 0.2); }
+
+  0%,
+  100% {
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+  }
+
+  50% {
+    border-color: rgba(239, 68, 68, 0.95);
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.65), inset 0 0 20px rgba(239, 68, 68, 0.2);
+  }
 }
 
 @keyframes particle-stream-flow {
-  from { stroke-dashoffset: 64; }
-  to { stroke-dashoffset: 0; }
+  from {
+    stroke-dashoffset: 64;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes lightning-branch-flash {
-  0%, 94%, 100% { opacity: 0; transform: scale(0.9); }
-  95% { opacity: 1; transform: scale(1.05); filter: drop-shadow(0 0 15px #38bdf8); }
-  97% { opacity: 0.3; }
-  98% { opacity: 1; filter: drop-shadow(0 0 20px #facc15); }
+
+  0%,
+  94%,
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  95% {
+    opacity: 1;
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 15px #38bdf8);
+  }
+
+  97% {
+    opacity: 0.3;
+  }
+
+  98% {
+    opacity: 1;
+    filter: drop-shadow(0 0 20px #facc15);
+  }
 }
 
 .animate-wave-swell {
@@ -1798,15 +1988,16 @@ div[class*="GlowCard"]:hover {
 }
 
 /* ============================================================
-   OCEANEMBED PRODUCTION THEME TOGGLE BUTTON (DARK ↔ LIGHT)
+   OCEANEMBED PRODUCTION THEME TOGGLE BUTTON (DARK â†” LIGHT)
 ============================================================ */
 
-/* Keyframe for 180° rotation and scale (0.9 -> 1) over 280ms */
+/* Keyframe for 180Â° rotation and scale (0.9 -> 1) over 280ms */
 @keyframes themeToggleSpin {
   0% {
     transform: rotate(-180deg) scale(0.9);
     opacity: 0.3;
   }
+
   100% {
     transform: rotate(0deg) scale(1);
     opacity: 1;
@@ -1842,9 +2033,9 @@ div[class*="GlowCard"]:hover {
   position: relative !important;
   user-select: none !important;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              background 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    background 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 /* Keyboard Accessible Focus Ring */
@@ -1858,7 +2049,7 @@ div[class*="GlowCard"]:hover {
   transform: translateY(0) scale(0.96) !important;
 }
 
-/* 🌙 Dark Mode (Default & html.dark & html:not(.light)) */
+/* ðŸŒ™ Dark Mode (Default & html.dark & html:not(.light)) */
 html:not(.light) .theme-toggle-btn,
 html.dark .theme-toggle-btn {
   background: rgba(10, 18, 30, 0.75) !important;
@@ -1894,7 +2085,7 @@ html.dark .theme-toggle-btn:hover .theme-toggle-moon {
   filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.75));
 }
 
-/* ☀️ Light Mode (html.light / [data-theme="light"]) */
+/* â˜€ï¸ Light Mode (html.light / [data-theme="light"]) */
 html.light .theme-toggle-btn {
   background: rgba(255, 255, 255, 0.82) !important;
   backdrop-filter: blur(18px) saturate(180%) !important;
@@ -1968,4 +2159,82 @@ html.light .gov-header-bar {
   border-bottom: 1px solid rgba(14, 165, 233, 0.20) !important;
   box-shadow: 0 2px 12px rgba(14, 116, 144, 0.08) !important;
   color: #475569 !important;
+}
+
+
+/* ============================================================
+   UNIVERSAL GOVERNMENT LIGHT MODE OVERRIDES
+   Ensures zero residual dark blue / dark navy backgrounds in light mode
+============================================================ */
+
+html.light body,
+[data-theme="light"] body {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light .bg-\[\#0a1329\],
+html.light .bg-\[\#020917\],
+html.light .bg-\[\#030e20\],
+html.light .bg-\[\#0a274a\],
+html.light .bg-\[\#050b18\],
+html.light .bg-\[\#060e1f\],
+html.light .bg-\[\#0f2147\],
+html.light .bg-\[\#040814\],
+html.light .bg-\[\#14234b\],
+html.light .bg-\[\#020611\],
+html.light .bg-\[\#08203e\],
+html.light .bg-\[\#081830\],
+html.light .bg-\[\#09152e\],
+html.light .bg-\[\#0a1f3d\] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .glass,
+html.light .glass-strong,
+html.light .glass-dark {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .text-white,
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300 {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .border-white\/10,
+html.light .border-white\/15,
+html.light .border-white\/20,
+html.light .border-slate-700,
+html.light .border-slate-800,
+html.light .border-slate-700\/80,
+html.light .border-slate-700\/90 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Backend status banner slide-down animation */
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out forwards;
 }

@@ -1,32 +1,62 @@
 /**
  * backendConfig.ts
  *
- * Universal Zero-Config Backend Auto-Discovery & Health Manager.
+ * Central backend base URL configuration for OceanEmbed.
  *
- * Automatically detects whether the backend is running on:
- *   - http://127.0.0.1:8000
- *   - http://localhost:8000
- *   - http://<lan-ip>:8000 (if testing over local WiFi)
- *   - Custom VITE_BACKEND_URL from environment
- *   - Vite dev proxy ('')
+ * Production / Cloudflare Pages:
+ *   Set VITE_API_BASE_URL to the public backend origin
+ *   (e.g. a Cloudflare Tunnel URL). Vite embeds this at build time.
  *
- * When a teammate or friend pulls this repository, the frontend will automatically
- * probe all candidate addresses in the background, lock onto whichever backend
- * is live, and seamlessly route all API requests to it without manual config!
+ * Development default:
+ *   http://127.0.0.1:8000
+ *
+ * Local auto-discovery (dev only) also probes localhost and the Vite proxy.
  */
 
 import { useEffect, useState } from 'react';
 
-// Common backend candidate hosts to auto-probe
-function getInitialCandidates(): string[] {
-  const envUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL;
-  const list: string[] = [];
+const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000';
+
+/**
+ * Resolve the configured API base URL from environment.
+ * Primary: VITE_API_BASE_URL
+ * Legacy fallbacks: VITE_BACKEND_URL, VITE_API_URL
+ */
+export function getConfiguredApiBaseUrl(): string | null {
+  const envUrl =
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_BACKEND_URL ||
+    import.meta.env.VITE_API_URL;
 
   if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    list.push(envUrl.trim().replace(/\/+$/, ''));
+    return envUrl.trim().replace(/\/+$/, '');
   }
 
-  // Saved working URL from previous session
+  return null;
+}
+
+export function getDefaultApiBaseUrl(): string {
+  return getConfiguredApiBaseUrl() || DEFAULT_API_BASE_URL;
+}
+
+function getInitialCandidates(): string[] {
+  const configured = getConfiguredApiBaseUrl();
+  const list: string[] = [];
+
+  if (configured) {
+    list.push(configured);
+  }
+
+  // Production builds: use only the configured/default origin.
+  // Do not probe localhost or the Vite dev proxy from a public site.
+  if (import.meta.env.PROD) {
+    if (!list.length) {
+      list.push(DEFAULT_API_BASE_URL);
+    }
+    return list;
+  }
+
+  // Saved working URL from previous local session
   if (typeof window !== 'undefined') {
     try {
       const saved = localStorage.getItem('ocean_active_backend_url');
@@ -38,19 +68,21 @@ function getInitialCandidates(): string[] {
     }
   }
 
-  // Standard local Python backend addresses
   const defaults = [
-    'http://127.0.0.1:8000',
+    DEFAULT_API_BASE_URL,
+    '',
     'http://localhost:8000',
   ];
 
-  // If frontend is accessed on a LAN IP (e.g. 192.168.x.x:5173), also probe backend on that LAN IP
-  if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  // If frontend is accessed on a LAN IP, also probe backend on that host
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
     defaults.push(`http://${window.location.hostname}:8000`);
   }
-
-  // Vite proxy fallback (same origin, eliminates CORS)
-  defaults.push('');
 
   for (const d of defaults) {
     if (!list.includes(d)) {
@@ -74,7 +106,7 @@ export interface BackendStatus {
   lastChecked?: string;
 }
 
-let activeBackendUrl: string = getInitialCandidates()[0] || 'http://127.0.0.1:8000';
+let activeBackendUrl: string = getInitialCandidates()[0] || DEFAULT_API_BASE_URL;
 let currentStatus: BackendStatus = {
   url: activeBackendUrl,
   isLive: false,
@@ -95,11 +127,11 @@ function notifyListeners() {
 }
 
 /**
- * Returns the currently active, validated backend base URL.
- * Defaults to 'http://127.0.0.1:8000' or whatever responding server was detected.
+ * Returns the currently active backend base URL.
+ * Defaults to VITE_API_BASE_URL or http://127.0.0.1:8000.
  */
 export function getBackendUrl(): string {
-  return activeBackendUrl;
+  return activeBackendUrl || getDefaultApiBaseUrl();
 }
 
 /**
@@ -128,7 +160,7 @@ export async function testBackendLiveness(baseUrl: string): Promise<{
 
   const probePath = async (path: string) => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
+    const timeout = setTimeout(() => controller.abort(), 1200);
     try {
       const res = await fetch(`${cleanBase}${path}`, {
         method: 'GET',
@@ -147,7 +179,6 @@ export async function testBackendLiveness(baseUrl: string): Promise<{
     }
   };
 
-  // Try /health first, then /api/health
   const healthRes = await probePath('/health');
   const elapsed = Math.round(performance.now() - start);
 
@@ -166,7 +197,7 @@ export async function testBackendLiveness(baseUrl: string): Promise<{
 }
 
 /**
- * Auto-probe all candidate backend URLs and lock onto the first responsive one.
+ * Auto-probe candidate backend URLs and lock onto the first responsive one.
  */
 export async function probeActiveBackend(): Promise<BackendStatus> {
   currentStatus = {
@@ -175,7 +206,6 @@ export async function probeActiveBackend(): Promise<BackendStatus> {
   };
   notifyListeners();
 
-  // First, check currently active URL
   const activeTest = await testBackendLiveness(activeBackendUrl);
   if (activeTest.ok) {
     currentStatus = {
@@ -194,7 +224,6 @@ export async function probeActiveBackend(): Promise<BackendStatus> {
     return currentStatus;
   }
 
-  // If active URL didn't respond, probe all candidates concurrently
   const candidates = getInitialCandidates().filter(c => c !== activeBackendUrl);
   for (const candidate of candidates) {
     const result = await testBackendLiveness(candidate);
@@ -223,7 +252,6 @@ export async function probeActiveBackend(): Promise<BackendStatus> {
     }
   }
 
-  // No live backend found
   currentStatus = {
     url: activeBackendUrl,
     isLive: false,
@@ -236,16 +264,13 @@ export async function probeActiveBackend(): Promise<BackendStatus> {
   return currentStatus;
 }
 
-// Background detector setup
 let autoDetectorStarted = false;
 export function startBackendAutoDetector() {
   if (autoDetectorStarted || typeof window === 'undefined') return;
   autoDetectorStarted = true;
 
-  // Initial probe immediately
   probeActiveBackend();
 
-  // Periodic poll: every 5s if offline to detect when user starts backend; every 30s if online
   setInterval(() => {
     probeActiveBackend();
   }, currentStatus.isLive ? 30000 : 5000);
@@ -258,7 +283,6 @@ export function useBackendStatus() {
   const [status, setStatus] = useState<BackendStatus>(currentStatus);
 
   useEffect(() => {
-    // Start background auto-detector on first component mount
     startBackendAutoDetector();
 
     setStatus(currentStatus);

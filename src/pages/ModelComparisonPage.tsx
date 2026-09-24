@@ -1713,11 +1713,13 @@ export default function ModelComparisonPage() {
                     </span>
                     <span className="text-xs text-white/50">6 Architectural Representations</span>
                   </div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <h3 className="text-lg font-bold flex items-center gap-2">
                     <BrainCircuit size={18} className="text-cyan-400" />
-                    Deep Neural Embedding Explorer & Trajectory Manifolds
+                    <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                      Deep Neural Embedding Explorer & Trajectory Manifolds
+                    </span>
                   </h3>
-                  <p className="text-xs text-white/60 max-w-2xl leading-relaxed">
+                  <p className="text-xs text-sky-100/90 font-medium max-w-2xl leading-relaxed">
                     Inspect high-dimensional manifold coordinates (PCA, t-SNE, UMAP) across Spatial CNN (48-D), Hierarchical Swin (13-D), Multi-Scale Fused (61-D), ConvGRU (64-D), GNN (16-D), and Autoencoder (32-D) with 7-day temporal flow vectors.
                   </p>
                 </div>
@@ -1737,11 +1739,13 @@ export default function ModelComparisonPage() {
 
             <div className="glass rounded-2xl p-6 border border-white/10 depth-shadow">
 
-              <h3 className="font-semibold text-white mb-1">
-                Backend Skill Overview
+              <h3 className="font-bold mb-1">
+                <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+                  Backend Skill Overview
+                </span>
               </h3>
 
-              <p className="text-xs text-white/40 mb-4">
+              <p className="text-xs text-sky-100/80 font-medium mb-4">
                 Derived directly from the selected backend report.
               </p>
 
@@ -2582,12 +2586,14 @@ export default function ModelComparisonPage() {
                     </span>
                   </div>
 
-                  <h3 className="text-xl font-bold text-white flex items-center gap-2 mt-2">
+                  <h3 className="text-xl font-bold flex items-center gap-2 mt-2">
                     <BrainCircuit size={20} className="text-cyan-400" />
-                    Deep Neural Embedding Explorer
+                    <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
+                      Deep Neural Embedding Explorer
+                    </span>
                   </h3>
 
-                  <p className="text-xs text-white/50 mt-1 max-w-3xl leading-relaxed">
+                  <p className="text-xs text-sky-100/90 font-medium mt-1 max-w-3xl leading-relaxed">
                     Interactive high-dimensional manifold projection comparing spatial (CNN 48-D), hierarchical attention (Swin 13-D), fused multi-scale (61-D), recurrent temporal (ConvGRU 64-D), topological mesh (GNN 16-D), and variational density (Autoencoder 32-D) ocean representations.
                   </p>
 

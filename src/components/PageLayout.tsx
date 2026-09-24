@@ -3,6 +3,8 @@ import { NavLink } from 'react-router-dom';
 import { Waves, Shield, Cpu, Activity, ArrowUpRight } from 'lucide-react';
 import Navbar from './Navbar';
 import WaterBackground from './WaterBackground';
+import GovFooter from './GovFooter';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface PageLayoutProps {
   children: ReactNode;
@@ -12,21 +14,25 @@ interface PageLayoutProps {
 }
 
 export function PlatformFooter() {
+  const { isLight } = useTheme();
+
+  if (isLight) {
+    return <GovFooter />;
+  }
+
   return (
-    <footer className="relative z-10 border-t border-white/10 light-footer dark:bg-[#010612]/90 backdrop-blur-xl mt-16 text-xs text-white/50">
-      {/* Top accent glow line */}
+    <footer className="relative z-10 border-t border-white/10 dark:bg-[#010612]/90 backdrop-blur-xl mt-16 text-xs text-white/50">
       <div className="h-px w-full bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          {/* Brand col */}
           <div className="md:col-span-1 space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-blue-600 to-indigo-700 flex items-center justify-center glow-cyan shadow-md">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-blue-600 to-indigo-700 flex items-center justify-center shadow-md">
                 <Waves size={16} className="text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="font-black text-base gradient-text-ocean tracking-tight">OCEANINTEL</span>
+                <span className="font-black text-base tracking-tight text-white">OCEANINTEL</span>
                 <span className="text-[10px] text-white/50 font-mono">INCOIS · MoES · SIH-2026</span>
               </div>
             </div>
@@ -39,7 +45,6 @@ export function PlatformFooter() {
             </div>
           </div>
 
-          {/* Quick links 1 */}
           <div>
             <h4 className="text-white/80 font-semibold mb-3 flex items-center gap-1.5 text-xs uppercase tracking-wider">
               <Activity size={13} className="text-cyan-400" />
@@ -69,7 +74,6 @@ export function PlatformFooter() {
             </ul>
           </div>
 
-          {/* Quick links 2 */}
           <div>
             <h4 className="text-white/80 font-semibold mb-3 flex items-center gap-1.5 text-xs uppercase tracking-wider">
               <Cpu size={13} className="text-purple-400" />
@@ -92,14 +96,13 @@ export function PlatformFooter() {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/input" className="hover:text-cyan-400 transition-colors flex items-center gap-1">
+                <NavLink to="/dashboard" className="hover:text-cyan-400 transition-colors flex items-center gap-1">
                   NetCDF File Pipeline <ArrowUpRight size={10} />
                 </NavLink>
               </li>
             </ul>
           </div>
 
-          {/* Emergency & Gov */}
           <div>
             <h4 className="text-white/80 font-semibold mb-3 flex items-center gap-1.5 text-xs uppercase tracking-wider">
               <Shield size={13} className="text-amber-400" />
@@ -130,7 +133,6 @@ export function PlatformFooter() {
           </div>
         </div>
 
-        {/* Bottom bar */}
         <div className="pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-white/40">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-1 text-white/60">
@@ -142,7 +144,7 @@ export function PlatformFooter() {
             </span>
             <span>·</span>
             <span className="inline-flex items-center gap-1">
-              Deep Ocean Mission (Samudrayaan)
+              Deep Ocean Mission
             </span>
           </div>
           <div className="font-mono text-cyan-300/80">
@@ -160,20 +162,20 @@ export default function PageLayout({
   fullHeight = false,
   showFooter,
 }: PageLayoutProps) {
+  const { isLight } = useTheme();
   const shouldShowFooter = showFooter !== undefined ? showFooter : !fullHeight;
 
   return (
-    <div className="min-h-screen gradient-ocean bg-grid flex flex-col relative overflow-x-hidden">
-      {/* Living Water Background matching Home page */}
-      <WaterBackground showSeaFloor={!fullHeight} />
+    <div className={`${fullHeight ? 'h-screen overflow-hidden' : 'min-h-screen overflow-x-hidden'} flex flex-col relative text-white ${className}`}>
 
+      {/* Official Top Government Header & Navbar */}
       <Navbar />
 
-      <main className={`relative z-10 pt-28 sm:pt-32 flex-1 ${fullHeight ? 'h-screen overflow-hidden' : 'min-h-screen'} ${className}`}>
+      <main className={`relative z-10 flex-1 min-h-0 w-full ${fullHeight ? 'overflow-hidden flex flex-col' : 'min-h-[calc(100vh-200px)]'} ${className}`}>
         {children}
       </main>
 
-      {shouldShowFooter && <PlatformFooter />}
+      {shouldShowFooter && (isLight ? <GovFooter /> : <PlatformFooter />)}
     </div>
   );
 }
@@ -187,7 +189,7 @@ export function PageContainer({
   className?: string;
 }) {
   return (
-    <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full ${className}`}>
+    <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full ${className}`}>
       {children}
     </div>
   );
@@ -213,14 +215,16 @@ export function PageHeader({
   actions,
   className = '',
 }: PageHeaderProps) {
+  const { isLight } = useTheme();
+
   return (
-    <div className={`flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 pb-6 border-b border-white/10 ${className}`}>
+    <div className={`flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 pb-4 border-b border-white/20 ${className}`}>
       <div>
         {/* Category breadcrumb / tag */}
         {(category || badge) && (
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             {category && (
-              <span className="text-[10px] font-mono font-bold uppercase tracking-widest px-3 py-1 rounded-full glass border border-cyan-500/30 text-cyan-300 shadow-sm">
+              <span className="text-[10px] font-mono font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-xs bg-white/15 border border-white/30 text-white backdrop-blur-md">
                 {category}
               </span>
             )}
@@ -231,18 +235,20 @@ export function PageHeader({
         {/* Title + Icon */}
         <div className="flex items-center gap-3">
           {icon && (
-            <div className="w-10 h-10 rounded-xl glass-strong flex items-center justify-center border border-cyan-400/40 shadow-[0_4px_12px_rgba(6,182,212,0.25),inset_0_1px_0_rgba(255,255,255,0.25)] shrink-0">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md shrink-0 bg-white/15 border-2 border-cyan-400/60 text-cyan-300 backdrop-blur-md">
               {icon}
             </div>
           )}
-          <h1 className="text-2xl sm:text-3xl font-black gradient-text-ocean tracking-tight">
-            {title}
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight drop-shadow-sm">
+            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+              {title}
+            </span>
           </h1>
         </div>
 
         {/* Subtitle */}
         {subtitle && (
-          <p className="text-white/50 text-sm mt-1.5 max-w-3xl leading-relaxed">
+          <p className="font-medium text-xs sm:text-sm mt-1.5 max-w-3xl leading-relaxed text-sky-100/90 drop-shadow-xs">
             {subtitle}
           </p>
         )}

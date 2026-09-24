@@ -42,6 +42,13 @@ export default function MapPage() {
     return (4.8 - (depth - 700) * 0.004).toFixed(1);
   };
 
+  const handleDoubleClickGrid = () => {
+    const lat = latParam ? parseFloat(latParam) : latest?.lat ?? 15.0;
+    const lon = lonParam ? parseFloat(lonParam) : latest?.lon ?? 88.0;
+    const date = latest?.date ?? '';
+    navigate(`/surface?lat=${lat}&lon=${lon}${date ? `&date=${date}` : ''}`);
+  };
+
   return (
     <PageLayout>
       <PageContainer>
@@ -67,8 +74,9 @@ export default function MapPage() {
                 Change Grid Cell
               </button>
               <button
-                onClick={() => navigate('/surface')}
+                onClick={handleDoubleClickGrid}
                 className="btn-primary-cyan text-xs"
+                title="Double click any depth level or click here to open Surface Observations"
               >
                 <Thermometer size={13} />
                 Surface Observations
@@ -136,6 +144,8 @@ export default function MapPage() {
                   <button
                     key={d}
                     onClick={() => setSelectedDepth(d)}
+                    onDoubleClick={handleDoubleClickGrid}
+                    title={`Click to inspect ${d}m · Double click to open Surface Observations`}
                     className={`py-1.5 px-1 rounded-xl text-xs font-mono transition-all cursor-pointer ${
                       selectedDepth === d
                         ? 'bg-cyan-500 text-black font-bold shadow-[0_0_12px_rgba(6,182,212,0.6)] scale-105'

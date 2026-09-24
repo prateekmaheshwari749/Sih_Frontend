@@ -173,10 +173,12 @@ export default function NeuralSubsurfaceLab() {
               0.25° Resolution · 15 Depths
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
-            Real-Time Satellite &rarr; 3D Subsurface Profile Synthesizer
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1 drop-shadow-sm">
+            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
+              Real-Time Satellite &rarr; 3D Subsurface Profile Synthesizer
+            </span>
           </h2>
-          <p className="text-xs sm:text-sm text-white/60 max-w-2xl leading-relaxed mt-1">
+          <p className="text-xs sm:text-sm text-sky-100/90 font-medium max-w-2xl leading-relaxed mt-1">
             Adjust surface satellite observations below to watch the deep learning model map multi-modal inputs through its latent embedding space into a full 0–1000m vertical temperature profile in real-time.
           </p>
         </div>

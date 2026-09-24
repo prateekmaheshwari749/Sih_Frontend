@@ -2,8 +2,8 @@
  * oceanApi.ts
  * API service layer for the OceanBed production backend.
  *
- * Backend:
- *   http://127.0.0.1:8000
+ * Backend base URL is controlled centrally via backendConfig
+ * (VITE_API_BASE_URL, default http://127.0.0.1:8000).
  *
  * Current backend routes:
  *
@@ -24,20 +24,11 @@
  *   POST /api/embeddings/compare
  */
 
+import { getBackendUrl } from './backendConfig'
 
+export { getBackendUrl }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Backend base URL (Dynamic auto-discovery with zero configuration)
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { getBackendUrl as getDynamicBackendUrl } from './backendConfig'
-
-export function getBackendUrl(): string {
-  return getDynamicBackendUrl()
-}
-
-const getBase = () => getBackendUrl().replace(/\/+$/, '')
+const getBase = () => getBackendUrl()
 
 
 
@@ -127,7 +118,7 @@ async function apiFetch<T>(
   const timer =
     setTimeout(() => {
       controller.abort()
-    }, 30_000)
+    }, 120_000)
 
   try {
     let response: Response
@@ -293,6 +284,58 @@ export interface ChatResponse {
   model: string
 }
 
+// src/api/oceanApi.ts
+
+export interface OceanProfileResponse {
+  success: boolean;
+  date: string;
+  forecast_date: string;
+
+  input_window: {
+    start: string;
+    end: string;
+    days: number;
+  };
+
+  requested_location: {
+    latitude: number;
+    longitude: number;
+  };
+
+  nearest_grid_location: {
+    latitude: number;
+    longitude: number;
+  };
+
+  depths_m: number[];
+  temperature_C: (number | null)[];
+
+  model: string;
+}
+
+export async function getOceanProfile(
+  date: string,
+  latitude: number,
+  longitude: number,
+): Promise<OceanProfileResponse> {
+
+  const url =
+    `${getBase()}/api/ocean/profile/` +
+    `${date}/${latitude}/${longitude}`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    throw new Error(
+      `Ocean profile request failed (${response.status}): ${errorText}`,
+    );
+  }
+
+  return response.json();
+}
+
 
 export interface MetricsBlock {
   rmse_C: number | null
@@ -409,26 +452,29 @@ export interface HeatmapAvailableResponse {
  * or an already-computed scalar.
  */
 export interface HeatmapJsonResponse {
+  success?: boolean
   date?: string
-
+  forecast_date?: string
   depth_m?: number
-
   depth_index?: number
-
+  lat?: number[]
+  lon?: number[]
+  values_C?: number[][]
   prediction_C?: unknown
-
   prediction?: unknown
-
   data?: unknown
-
   shape?: number[]
-
+  input_window?: {
+    start?: string
+    end?: string
+    days?: number
+  }
+  grid_shape?: number[]
   min_C?: number | null
-
   max_C?: number | null
-
   mean_C?: number | null
-
+  finite_fraction?: number
+  units?: string
   [key: string]: unknown
 }
 
@@ -945,3 +991,108 @@ export const api = {
   healthUrl: () =>
     `${getBase()}/health`,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pipeline A Execution & Specifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PipelineARunResponse {
+  status: string;
+  pipeline: string;
+  version: string;
+  job_id: string;
+  started_at: string;
+  finished_at: string;
+  target_date: string;
+  stages: Record<string, any>;
+  validation_summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    compliance_score_percent: number;
+  };
+  prediction_output: {
+    date: string;
+    mean_sst_C: number;
+    mean_sss_PSU: number;
+    mean_ssh_cm: number;
+    mean_tchp_kJ_cm2: number;
+    d26_depth_m: number;
+    depth_profile: { depth: number; temperature_C: number; uncertainty_C?: number }[];
+  };
+  [key: string]: unknown;
+}
+
+export async function runPipelineA(payload?: Record<string, unknown>): Promise<PipelineARunResponse> {
+  try {
+    return await apiFetch<PipelineARunResponse>(`${getBase()}/api/pipeline_a/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    });
+  } catch {
+    return apiFetch<PipelineARunResponse>(`${getBase()}/api/pipeline/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    });
+  }
+}
+
+export async function fetchPipelineASpecs(): Promise<Record<string, unknown>> {
+  try {
+    return await apiFetch<Record<string, unknown>>(`${getBase()}/api/pipeline_a/specs`);
+  } catch {
+    return apiFetch<Record<string, unknown>>(`${getBase()}/api/pipeline/specs`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ocean Profile & Deep Subsurface Diagnostics
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface OceanProfileResponse {
+  success: boolean;
+  date: string;
+  forecast_date: string;
+  input_window: { start: string; end: string; days: number };
+  requested_location: { latitude: number; longitude: number };
+  nearest_grid_location: { latitude: number; longitude: number };
+  depths_m: number[];
+  temperature_C: (number | null)[];
+  model: string;
+}
+
+export interface OceanDiagnosticsResponse {
+  success: boolean;
+  date: string;
+  forecast_date: string;
+  requested_location: { latitude: number; longitude: number };
+  nearest_grid_location: { latitude: number; longitude: number };
+  surface_temperature_C: number;
+  depths_m: number[];
+  temperature_profile_C: (number | null)[];
+  d26?: { d26_depth_m: number; reference_temperature_C: number };
+  ohc_0_700?: { ohc_0_700_GJ_m2: number; formula: string };
+  tchp?: { tchp_kJ_cm2: number; formula: string };
+}
+
+export async function fetchOceanProfile(
+  date: string,
+  latitude: number,
+  longitude: number
+): Promise<OceanProfileResponse> {
+  const safeDate = clampDate(date);
+  return apiFetch<OceanProfileResponse>(
+    `${getBase()}/api/ocean/profile/${safeDate}/${latitude}/${longitude}`
+  );
+}
+
+export async function fetchOceanDiagnostics(
+  date: string,
+  latitude: number,
+  longitude: number
+): Promise<OceanDiagnosticsResponse> {
+  const safeDate = clampDate(date);
+  return apiFetch<OceanDiagnosticsResponse>(
+    `${getBase()}/api/ocean/diagnostics/${safeDate}/${latitude}/${longitude}`
+  );
+}

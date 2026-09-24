@@ -1,0 +1,85 @@
+/* ================================================================
+   OceanIntel — Global Ocean Background
+   ================================================================ */
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  background: #025584;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Global routed-content layer */
+.ocean-route-shell {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+}
+
+/* ================================================================
+   PAGE FRAME
+   ================================================================ */
+
+.ocean-page-frame {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+
+  /*
+   * Critical:
+   * This allows CommonOceanBackground to remain visible.
+   */
+  background: transparent;
+}
+
+/*
+ * Only the DIRECT page root is made transparent.
+ *
+ * Inner:
+ * cards
+ * charts
+ * maps
+ * buttons
+ * modals
+ * 3D components
+ *
+ * remain untouched.
+ */
+.ocean-page-frame > * {
+  position: relative;
+  z-index: 1;
+  background-color: transparent !important;
+}
+
+/* ================================================================
+   OPTIONAL GLASS SURFACE
+   ================================================================ */
+
+.ocean-page-glass {
+  background: rgba(255, 255, 255, 0.70);
+  border: 1px solid rgba(11, 118, 174, 0.14);
+
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ================================================================
+   ACCESSIBILITY
+   ================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

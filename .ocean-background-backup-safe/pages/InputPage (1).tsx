@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Upload, FileText, CheckCircle2, Loader2, AlertCircle,
   Layers, History, ChevronRight,
@@ -14,6 +14,7 @@ import { format, parseISO } from 'date-fns';
 import PageLayout, { PageContainer, PageHeader } from '../components/PageLayout';
 import { useData, DEPTH_LEVELS, type DayRecord, type SurfaceInputs } from '../contexts/DataContext';
 import { getBackendUrl } from '../api/backendConfig';
+import { fetchHealth, fetchSurface } from '../api/oceanApi';
 import InputPhysicsAndSimulationExplainer from '../components/InputPhysicsAndSimulationExplainer';
 
 // ── Expected .nc variable names per dataset ────────────────────────────────────
@@ -345,6 +346,38 @@ export default function InputPage() {
   const [running,  setRunning]      = useState(false);
   const [result,   setResult]       = useState<DayRecord | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+  const [backendDevice, setBackendDevice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkBackend = async () => {
+      try {
+        const health = await fetchHealth();
+
+        if (cancelled) return;
+
+        setBackendConnected(true);
+        setBackendDevice(health.device ?? null);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[InputPage] Backend health check failed:', error);
+          setBackendConnected(false);
+          setBackendDevice(null);
+        }
+      }
+    };
+
+    checkBackend();
+
+    const intervalId = window.setInterval(checkBackend, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   // Handle file drop/select for a slot
   const handleFileUpload = useCallback(async (slotId: SlotId, file: File) => {
@@ -391,32 +424,122 @@ export default function InputPage() {
   const allReady       = readySlots.length === requiredSlots.length;
   const anyParsing     = Object.values(parsing).some(Boolean);
 
-  // Build the model input from the uploaded files.
-  // IMPORTANT: the raw NetCDF files are sent to the backend; the browser does
-  // not invent/fill an SLA value because SLA is not part of our dataset.
-  const buildBackendFormData = (meta: ReturnType<typeof inferMeta>) => {
-    const formData = new FormData();
+  // The production backend already has a date/location inference endpoint.
+  // The browser uploads are used here to select the requested date/location,
+  // while the backend performs the actual CNN + Swin + ConvGRU inference
+  // against its harmonized 7-day input window.
+  const getBackendBaseUrl = () => getBackendUrl().replace(/\/+$/, '');
 
-    formData.append('date', meta.date);
-    formData.append('lat', String(meta.lat));
-    formData.append('lon', String(meta.lon));
+  const fetchBackendJson = async <T,>(path: string): Promise<T> => {
+    const base = getBackendBaseUrl();
+    const url = base ? `${base}${path}` : path;
 
-    for (const slot of FILE_SLOTS) {
-      const upload = uploads[slot.id];
-      if (upload?.status === 'ready') {
-        formData.append(slot.id, upload.file, upload.file.name);
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch {
+      response = await fetch(path);
+    }
+
+    if (!response.ok) {
+      let message = response.statusText;
+      try {
+        const payload = await response.json();
+        message =
+          typeof payload?.detail === 'string'
+            ? payload.detail
+            : typeof payload?.message === 'string'
+              ? payload.message
+              : message;
+      } catch {
+        // Keep the HTTP status text when the backend did not return JSON.
+      }
+      throw new Error(`Backend returned ${response.status}: ${message}`);
+    }
+
+    return response.json() as Promise<T>;
+  };
+
+  const deriveMLD = (depths: number[], temperatures: number[]) => {
+    if (!temperatures.length) return 0;
+    const surface = temperatures[0];
+
+    for (let i = 1; i < Math.min(depths.length, temperatures.length); i += 1) {
+      if (
+        Number.isFinite(temperatures[i]) &&
+        surface - temperatures[i] >= 0.5
+      ) {
+        return Number(depths[i]);
       }
     }
 
-    return formData;
+    return Number(depths[Math.min(temperatures.length - 1, depths.length - 1)] ?? 0);
   };
 
-  // The backend URL is auto-discovered dynamically or overridden via VITE_API_URL
-  const getPredictUrl = () => {
-    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-    const base = getBackendUrl().replace(/\/+$/, '');
-    return base ? `${base}/api/predict` : '/api/predict';
+  const deriveThermoclineDepth = (depths: number[], temperatures: number[]) => {
+    if (temperatures.length < 3) {
+      return Number(depths[0] ?? 0);
+    }
+
+    let bestDepth = Number(depths[0] ?? 0);
+    let bestGradient = -Infinity;
+
+    for (let i = 1; i < Math.min(depths.length - 1, temperatures.length - 1); i += 1) {
+      const dz = Number(depths[i + 1]) - Number(depths[i - 1]);
+      const dt = Number(temperatures[i + 1]) - Number(temperatures[i - 1]);
+
+      if (!Number.isFinite(dz) || dz === 0 || !Number.isFinite(dt)) continue;
+
+      const gradient = Math.abs(dt / dz);
+      if (gradient > bestGradient) {
+        bestGradient = gradient;
+        bestDepth = Number(depths[i]);
+      }
+    }
+
+    return bestDepth;
   };
+
+  const extractNearestSurfaceInputs = (
+    surface: Awaited<ReturnType<typeof fetchSurface>>,
+    latitude: number,
+    longitude: number,
+  ): Omit<SurfaceInputs, 'sla'> => {
+    const nearestIndex = (values: number[], target: number) => {
+      let best = 0;
+      let bestDistance = Infinity;
+
+      values.forEach((value, index) => {
+        const distance = Math.abs(value - target);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = index;
+        }
+      });
+
+      return best;
+    };
+
+    const latIndex = nearestIndex(surface.lat, latitude);
+    const lonIndex = nearestIndex(surface.lon, longitude);
+    const vars = surface.variables;
+
+    const valueAt = (grid: number[][], fallback: number) => {
+      const value = grid?.[latIndex]?.[lonIndex];
+      return Number.isFinite(value) ? Number(value) : fallback;
+    };
+
+    return {
+      sst: valueAt(vars.sst, 0),
+      sss: valueAt(vars.sss, 0),
+      ssh: valueAt(vars.ssh, 0),
+      ucurrent: valueAt(vars.current_u, 0),
+      vcurrent: valueAt(vars.current_v, 0),
+      uwind: valueAt(vars.u_wind, 0),
+      vwind: valueAt(vars.v_wind, 0),
+    };
+  };
+
 
   // Best-guess date and location from uploaded files
   const inferMeta = () => {
@@ -437,80 +560,124 @@ export default function InputPage() {
 
     try {
       const meta = inferMeta();
-      const formData = buildBackendFormData(meta);
 
-      // Send the ACTUAL uploaded NetCDF files to the backend/model.
-      // Do not set Content-Type manually: the browser adds the multipart boundary.
-      const targetUrl = getPredictUrl();
-      let response: Response;
-      try {
-        response = await fetch(targetUrl, {
-          method: 'POST',
-          body: formData,
-        });
-      } catch {
-        // Transparent fallback to same-origin Vite proxy if direct port 8000 hit browser CORS
-        response = await fetch('/api/predict', {
-          method: 'POST',
-          body: formData,
-        });
-      }
+      // The current production backend's point-profile route runs the real
+      // 7-day CNN + Swin + ConvGRU inference and returns the 15-depth profile.
+      const profilePath =
+        `/api/ocean/profile/${encodeURIComponent(meta.date)}` +
+        `/${encodeURIComponent(String(meta.lat))}` +
+        `/${encodeURIComponent(String(meta.lon))}`;
 
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(
-          `Backend returned ${response.status}: ${message || response.statusText}`
-        );
-      }
+      const ohcPath =
+        `/api/diagnostics/ohc/${encodeURIComponent(meta.date)}` +
+        `/${encodeURIComponent(String(meta.lat))}` +
+        `/${encodeURIComponent(String(meta.lon))}`;
 
-      const prediction = await response.json();
+      const [profileResponse, ohcResponse, surfaceResponse] = await Promise.all([
+        fetchBackendJson<{
+          success?: boolean;
+          date?: string;
+          forecast_date?: string;
+          requested_location?: { latitude?: number; longitude?: number };
+          nearest_grid_location?: { latitude?: number; longitude?: number };
+          depths_m?: number[];
+          temperature_C?: Array<number | null>;
+          model?: string;
+        }>(profilePath),
+        fetchBackendJson<{
+          status?: string;
+          ohc_0_700_kJ_cm2?: number | null;
+          ohc_0_700_GJ_m2?: number | null;
+        }>(ohcPath),
+        fetchSurface(meta.date),
+      ]);
 
-      // Expected backend response:
-      // {
-      //   profile: { depths: number[], temperatures: number[], argoTemps?: number[] },
-      //   mld: number,
-      //   ohc: number,
-      //   thermoclineDepth: number,
-      //   embeddingVector?: number[]
-      // }
+      const depths = Array.isArray(profileResponse.depths_m)
+        ? profileResponse.depths_m.map(Number)
+        : [];
+
+      const temperatures = Array.isArray(profileResponse.temperature_C)
+        ? profileResponse.temperature_C.map(v => Number(v))
+        : [];
+
       if (
-        !prediction?.profile?.depths ||
-        !prediction?.profile?.temperatures
+        depths.length !== DEPTH_LEVELS.length ||
+        temperatures.length !== DEPTH_LEVELS.length ||
+        temperatures.some(v => !Number.isFinite(v))
       ) {
         throw new Error(
-          'Backend response is missing profile.depths or profile.temperatures.'
+          'Backend profile response is incomplete or does not contain all 15 depth temperatures.',
         );
       }
 
-      const inputs = prediction.inputs ?? {
-        ...Object.fromEntries(
-          FILE_SLOTS.flatMap(slot => {
-            const values = uploads[slot.id]?.extractedValues ?? {};
-            return Object.entries(values);
-          })
-        ),
+      const profile: DayRecord['profile'] = {
+        depths,
+        temperatures,
       };
 
+      const ohcGJ = Number(ohcResponse.ohc_0_700_GJ_m2);
+      const ohcKJ =
+        Number(ohcResponse.ohc_0_700_kJ_cm2);
+
+      // 1 GJ/m² = 100 kJ/cm².
+      const ohc = Number.isFinite(ohcKJ)
+        ? ohcKJ
+        : Number.isFinite(ohcGJ)
+          ? ohcGJ * 100
+          : 0;
+
+      const nearestLat =
+        Number(profileResponse.nearest_grid_location?.latitude);
+      const nearestLon =
+        Number(profileResponse.nearest_grid_location?.longitude);
+
+      const finalLat = Number.isFinite(nearestLat) ? nearestLat : meta.lat;
+      const finalLon = Number.isFinite(nearestLon) ? nearestLon : meta.lon;
+
+      const backendInputs = extractNearestSurfaceInputs(
+        surfaceResponse,
+        finalLat,
+        finalLon,
+      );
+
+      const forecastDate = profileResponse.forecast_date ?? meta.date;
+      const location =
+        finalLon > 80
+          ? finalLat > 12
+            ? 'Bay of Bengal (NE)'
+            : 'Bay of Bengal (SW)'
+          : finalLat > 15
+            ? 'Arabian Sea (NW)'
+            : 'Arabian Sea (SE)';
+
       const record = addRecord({
-        date: prediction.date ?? meta.date,
-        location: prediction.location ?? meta.location,
-        lat: prediction.lat ?? meta.lat,
-        lon: prediction.lon ?? meta.lon,
-        inputs: inputs as SurfaceInputs,
-        profile: prediction.profile,
-        mld: Number(prediction.mld),
-        ohc: Number(prediction.ohc),
-        thermoclineDepth: Number(prediction.thermoclineDepth),
-        embeddingVector: prediction.embeddingVector,
+        date: forecastDate,
+        location,
+        lat: finalLat,
+        lon: finalLon,
+        // SLA is not one of the seven backend surface channels.
+        // Keep DataContext compatibility without feeding/inventing SLA for inference.
+        inputs: {
+          ...backendInputs,
+          sla: 0,
+        },
+        profile,
+        mld: deriveMLD(depths, temperatures),
+        ohc,
+        thermoclineDepth: deriveThermoclineDepth(depths, temperatures),
+        embeddingVector: undefined,
       });
 
+      setBackendConnected(true);
       setResult(record);
     } catch (error) {
-      console.error('Subsurface reconstruction failed:', error);
+      console.error('[InputPage] Subsurface reconstruction failed:', error);
+      setBackendConnected(false);
+
       window.alert(
         error instanceof Error
           ? error.message
-          : 'Failed to connect to the reconstruction backend.'
+          : 'Failed to connect to the reconstruction backend.',
       );
     } finally {
       setRunning(false);
@@ -526,14 +693,36 @@ export default function InputPage() {
         <PageHeader
           category="SIMULATION & PIPELINE"
           badge={
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              {uploadedCount} / {totalSlots} FILES READY
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                {uploadedCount} / {totalSlots} FILES READY
+              </div>
+              <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono ${
+                backendConnected === true
+                  ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                  : backendConnected === false
+                    ? 'bg-red-500/15 border border-red-500/30 text-red-300'
+                    : 'bg-white/5 border border-white/10 text-white/40'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  backendConnected === true
+                    ? 'bg-emerald-400'
+                    : backendConnected === false
+                      ? 'bg-red-400'
+                      : 'bg-white/30'
+                }`} />
+                {backendConnected === true
+                  ? `BACKEND LIVE${backendDevice ? ` · ${backendDevice}` : ''}`
+                  : backendConnected === false
+                    ? 'BACKEND OFFLINE'
+                    : 'CHECKING BACKEND'}
+              </div>
             </div>
           }
           icon={<Layers size={18} className="text-cyan-400" />}
           title="NetCDF Data Pipeline"
-          subtitle="Upload daily satellite .nc files — the embedding model extracts surface variables and reconstructs subsurface temperature profiles at 15 depth levels"
+          subtitle="Upload daily satellite .nc files — select the input date/location, then run the production CNN + Swin + ConvGRU backend to reconstruct 15 depth levels"
           actions={
             <button
               onClick={handleRun}
