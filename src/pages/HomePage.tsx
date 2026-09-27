@@ -1,11 +1,10 @@
-import { useEffect, useState, useMemo, type ReactNode } from 'react';
+import React, { useEffect, useState, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Waves,
   MessageSquare,
   LayoutDashboard,
   Wind,
-  BarChart2,
   ArrowRight,
   Layers,
   Database,
@@ -21,12 +20,10 @@ import {
   Droplets,
   Flame,
   Globe2,
-  Sliders,
-  Radio,
-  Sparkles,
   Layers3,
+  BrainCircuit,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+
 import {
   fetchHealth,
   fetchModelInfo,
@@ -230,14 +227,14 @@ const MODULES = [
   {
     title: 'GLORYS12 Reanalysis Compare',
     desc: 'Validate AI reconstruction against Copernicus GLORYS12 reanalysis.',
-    to: '/compare',
+    to: '/embeddings?tab=comparison',
     icon: GitCompare,
     tag: 'Benchmarking',
   },
   {
     title: 'ARGO Float Validation Hub',
     desc: 'In-situ match-up metrics with per-depth RMSE, bias, and correlation.',
-    to: '/validation',
+    to: '/embeddings?tab=depth',
     icon: CheckCircle2,
     tag: 'Precision',
   },
@@ -247,6 +244,13 @@ const MODULES = [
     to: '/surface',
     icon: Eye,
     tag: 'Telemetry',
+  },
+  {
+    title: 'Embeddings',
+    desc: '466 neural representation vectors across 5 ocean domains, PCA/t-SNE/UMAP projections & live sync.',
+    to: '/embeddings',
+    icon: BrainCircuit,
+    tag: 'Latent Space',
   },
   {
     title: 'Ask X AI Assistant',
@@ -347,7 +351,6 @@ export default function HomePage() {
     return null;
   };
 
-  const liveLatency = getNumber('inference_latency_ms', 'latency_ms', 'inference_latency', 'latency');
   const liveDepthCount = getNumber('output_depths', 'depth_count', 'num_depths');
   const liveModelName = getString('model', 'model_name', 'name', 'architecture');
 
@@ -370,11 +373,11 @@ export default function HomePage() {
 
             {/* Sovereign & SIH Floating Glass Badge */}
             <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/95 text-[#005088] border border-white shadow-[0_8px_25px_rgba(0,0,0,0.2)] text-xs font-mono backdrop-blur-xl">
-              <IndiaFlag className="w-4 h-2.5" />
+              <IndiaFlag className="w-5 h-3.5" />
               <span className="text-[#005088] font-black">SIH 2026</span>
-              <span className="text-cyan-400 font-bold">•</span>
+              <span className="text-cyan-600 font-bold">•</span>
               <span className="text-sky-950 font-bold">MoES &amp; INCOIS Aligned</span>
-              <span className="text-cyan-400 font-bold">•</span>
+              <span className="text-cyan-600 font-bold">•</span>
               <span className="text-emerald-700 font-semibold">NORTH INDIAN OCEAN BASIN</span>
             </div>
 

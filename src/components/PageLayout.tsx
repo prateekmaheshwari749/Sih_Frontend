@@ -86,12 +86,12 @@ export function PlatformFooter() {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/compare" className="hover:text-cyan-400 transition-colors flex items-center gap-1">
+                <NavLink to="/embeddings" className="hover:text-cyan-400 transition-colors flex items-center gap-1">
                   CNN vs Swin Embeddings <ArrowUpRight size={10} />
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/validation" className="hover:text-cyan-400 transition-colors flex items-center gap-1">
+                <NavLink to="/embeddings?tab=depth" className="hover:text-cyan-400 transition-colors flex items-center gap-1">
                   ARGO Ground-Truth Test <ArrowUpRight size={10} />
                 </NavLink>
               </li>
@@ -248,7 +248,10 @@ export function PageHeader({
 
         {/* Subtitle */}
         {subtitle && (
-          <p className="font-medium text-xs sm:text-sm mt-1.5 max-w-3xl leading-relaxed text-sky-100/90 drop-shadow-xs">
+          <p
+            className="font-medium text-xs sm:text-sm mt-1.5 max-w-3xl leading-relaxed text-white drop-shadow-sm"
+            style={{ color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}
+          >
             {subtitle}
           </p>
         )}

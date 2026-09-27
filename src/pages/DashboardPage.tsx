@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Thermometer,
@@ -7,7 +7,7 @@ import {
   Droplets,
   Activity,
   Waves,
-  Calendar,
+
   Compass,
   ArrowRight,
   TrendingUp,
@@ -34,7 +34,7 @@ import {
   Check,
   Search,
   Globe,
-  Map,
+  Map as MapIcon,
   ExternalLink,
   ArrowDown,
 } from 'lucide-react';
@@ -53,9 +53,18 @@ import Navbar from '../components/Navbar';
 import GovFooter from '../components/GovFooter';
 import IndiaFlag from '../components/IndiaFlag';
 import SurfaceObservationSubpage from '../components/SurfaceObservationSubpage';
+import SurfaceObservationEmbedded from '../components/SurfaceObservationEmbedded';
 import { useData } from '../contexts/DataContext';
 import { useBackendStatus } from '../api/backendConfig';
-import { fetchSurface } from '../api/oceanApi';
+import {
+  fetchSurface,
+  inspectPipelineAFile,
+  uploadPipelineA,
+  fetchPipelineAStatus,
+  type PipelineASlot,
+  type PipelineAFileInspection,
+  type PipelineAStatusResponse,
+} from '../api/oceanApi';
 
 /* ============================================================
    WHITE CARD COMPONENT (Crisp white glass on dark ocean theme)
@@ -250,6 +259,25 @@ const NC_VARIABLE_SPEC = {
   },
 };
 
+function inferObservationDateFromFilename(filename: string): string {
+  const stem = filename.replace(/\\.(nc4?|netcdf|cdf|h5|hdf5)$/i, '');
+  const patterns = [
+    /(^|[^0-9])(20\\d{2})[-_](0[1-9]|1[0-2])[-_](0[1-9]|[12]\\d|3[01])([^0-9]|$)/,
+    /(^|[^0-9])(20\\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])([^0-9]|$)/,
+  ];
+  for (const re of patterns) {
+    const m = stem.match(re);
+    if (!m) continue;
+    const y = m[2];
+    const mo = m[3];
+    const d = m[4];
+    const candidate = `${y}-${mo}-${d}`;
+    const dt = new Date(`${candidate}T00:00:00Z`);
+    if (!Number.isNaN(dt.getTime())) return candidate;
+  }
+  return '';
+}
+
 const FILE_SLOTS = [
   { id: 'sst', ...NC_VARIABLE_SPEC.sst, icon: Thermometer, required: true },
   { id: 'sss', ...NC_VARIABLE_SPEC.sss, icon: Droplets, required: true },
@@ -259,6 +287,93 @@ const FILE_SLOTS = [
 ] as const;
 
 type SlotId = (typeof FILE_SLOTS)[number]['id'];
+
+
+const SLOT_VARIABLE_GROUPS: Record<'sst' | 'sss' | 'ssh' | 'currents' | 'winds', string[][]> = {
+  sst: [NC_VARIABLE_SPEC.sst.variables],
+  sss: [NC_VARIABLE_SPEC.sss.variables],
+  ssh: [NC_VARIABLE_SPEC.ssh.variables],
+  currents: [
+    ['ugos', 'u_curr', 'uo', 'current_u', 'current_u_component'],
+    ['vgos', 'v_curr', 'vo', 'current_v', 'current_v_component'],
+  ],
+  winds: [
+    ['u10', 'eastward_wind', 'uas', 'wind_u'],
+    ['v10', 'northward_wind', 'vas', 'wind_v'],
+  ],
+};
+
+function validateScientificVariables(
+  slotId: SlotId,
+  variables: string[],
+): {
+  valid: boolean;
+  partial: boolean;
+  matched: string[];
+  missingGroups: string[][];
+  reason?: string;
+} {
+  const normalized = new Map<string, string>(
+    variables.map((value): [string, string] => [value.trim().toLowerCase(), value]),
+  );
+  const groups = SLOT_VARIABLE_GROUPS[slotId];
+  const matched: string[] = [];
+  const missingGroups: string[][] = [];
+
+  for (const group of groups) {
+    const found = group
+      .map((alias) => normalized.get(alias.toLowerCase()))
+      .filter((value): value is string => Boolean(value));
+
+    if (found.length > 0) {
+      matched.push(...found);
+    } else {
+      missingGroups.push(group);
+    }
+  }
+
+  if (missingGroups.length === 0) {
+    return {
+      valid: true,
+      partial: false,
+      matched: Array.from(new Set(matched)),
+      missingGroups: [],
+    };
+  }
+
+  const isVectorSlot = slotId === 'currents' || slotId === 'winds';
+  const isRecognizedVectorComponent = isVectorSlot && matched.length > 0;
+
+  if (isRecognizedVectorComponent) {
+    const componentLabel = slotId === 'currents' ? 'current' : 'wind';
+    const missingLabel = missingGroups
+      .map((group) => group.join(' / '))
+      .join(' OR ');
+
+    return {
+      valid: false,
+      partial: true,
+      matched: Array.from(new Set(matched)),
+      missingGroups,
+      reason:
+        `Accepted ${componentLabel} component file (${Array.from(new Set(matched)).join(', ')}). ` +
+        `This file is scientifically valid for the ${NC_VARIABLE_SPEC[slotId].label} feed, ` +
+        `but the companion component is still required: ${missingLabel}.`,
+    };
+  }
+
+  const expected = missingGroups
+    .map((group) => group.join(' / '))
+    .join(' OR ');
+
+  return {
+    valid: false,
+    partial: false,
+    matched: Array.from(new Set(matched)),
+    missingGroups,
+    reason: `Parameter mismatch: ${NC_VARIABLE_SPEC[slotId].label} slot requires ${expected}. Variables found in this file: ${variables.join(', ') || 'none'}.`,
+  };
+}
 
 interface UploadedFile {
   file?: File;
@@ -270,7 +385,7 @@ interface UploadedFile {
   lat: number;
   lon: number;
   location: string;
-  status: 'ready' | 'error' | 'pending';
+  status: 'ready' | 'error' | 'pending' | 'partial';
   errorMsg?: string;
   validationDetails?: {
     cf18: boolean;
@@ -278,6 +393,7 @@ interface UploadedFile {
     physicalRange: boolean;
     qualityPassed: boolean;
   };
+  backendInspection?: PipelineAFileInspection;
 }
 
 /* ============================================================
@@ -326,7 +442,9 @@ function WhiteDropZone({
           ? 'border-emerald-300 shadow-xs'
           : uploaded?.status === 'error'
             ? 'border-rose-300 bg-rose-50/30'
-            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
+            : uploaded?.status === 'partial'
+                ? 'border-amber-300 bg-amber-50/30'
+                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
         }`}
     >
       <input
@@ -349,7 +467,11 @@ function WhiteDropZone({
             >
               <Icon
                 size={14}
-                className={uploaded?.status === 'error' ? 'text-rose-700' : slot.color}
+                className={uploaded?.status === 'error'
+                  ? 'text-rose-700'
+                  : uploaded?.status === 'partial'
+                    ? 'text-amber-700'
+                    : slot.color}
               />
             </div>
             <div>
@@ -373,9 +495,14 @@ function WhiteDropZone({
                 <XCircle size={10} />
                 Failed
               </span>
+            ) : uploaded?.status === 'partial' ? (
+              <span className="flex items-center gap-1 text-[9.5px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                <AlertTriangle size={10} />
+                Component Accepted
+              </span>
             ) : (
               <span className="text-[9.5px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                Auto-Fallback
+                Awaiting Upload
               </span>
             )}
           </div>
@@ -429,7 +556,7 @@ function WhiteDropZone({
             <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
               <span className="text-emerald-700 font-bold flex items-center gap-1">
                 <Check size={10} className="text-emerald-600" />
-                CF-1.8 Validated
+                Backend Inspected
               </span>
               <button
                 onClick={onRemove}
@@ -438,6 +565,32 @@ function WhiteDropZone({
                 Clear
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Partial component state */}
+        {uploaded?.status === 'partial' && (
+          <div className="mt-2 pt-2 border-t border-amber-200">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1 truncate">
+                <FileText size={11} className="text-amber-700 shrink-0" />
+                <span className="font-mono text-[10.5px] font-medium text-slate-800 truncate max-w-[130px]" title={uploaded.name}>
+                  {uploaded.name}
+                </span>
+              </div>
+              <span className="text-[9.5px] font-mono text-slate-500 shrink-0">
+                {uploaded.sizeLabel}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[10px] text-amber-800 font-medium leading-tight">
+              {uploaded.errorMsg || 'Accepted vector component. The companion U/V component is still required for Pipeline A.'}
+            </p>
+            <button
+              onClick={onRemove}
+              className="mt-1 text-[10px] text-amber-700 hover:underline font-bold cursor-pointer"
+            >
+              Remove file
+            </button>
           </div>
         )}
 
@@ -525,21 +678,198 @@ function getDailyOceanParameters(dateStr: string, lat: number = 15.5, lon: numbe
 }
 
 /* ============================================================
+   REAL-TIME PIPELINE PROGRESS HELPERS
+============================================================ */
+const PIPELINE_PROGRESS_STAGES = [
+  'ingestion',
+  'cleaning',
+  'harmonization',
+  'harmonization_verification',
+  'ocean_nan_fill',
+  'validation',
+  'model_ready',
+  'inference',
+] as const;
+
+function extractValidationProgress(logTail?: string): number {
+  if (!logTail) return 0;
+
+  const markerIndex = logTail.toUpperCase().lastIndexOf('[6/8]');
+  const validationLog = markerIndex >= 0 ? logTail.slice(markerIndex) : logTail;
+
+  let progress = 0;
+
+  const fractionMatches = Array.from(
+    validationLog.matchAll(/(?:TEST|CHECK|GATE)?\s*(\d+)\s*\/\s*26\b/gi),
+  );
+  for (const match of fractionMatches) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n)) progress = Math.max(progress, Math.min(26, n));
+  }
+
+  const totalMatch = validationLog.match(/TOTAL\s*:\s*(\d+)\s*\/\s*26/i);
+  if (totalMatch) {
+    const n = Number(totalMatch[1]);
+    if (Number.isFinite(n)) progress = Math.max(progress, Math.min(26, n));
+  }
+
+  // Many validation scripts print one PASS line per test. Count those
+  // only after the validation stage marker and cap at the 26 real tests.
+  const passCount = (validationLog.match(/\bPASS\b/gi) ?? []).length;
+  progress = Math.max(progress, Math.min(26, passCount));
+
+  return progress;
+}
+
+function calculatePipelineProgress(
+  status: PipelineAStatusResponse | null,
+  testingRunning: boolean,
+  testsPassed: boolean,
+  fallbackStep: number,
+): { percent: number; stageText: string; validationTests: number } {
+  if (testsPassed || status?.status === 'SUCCESS') {
+    return {
+      percent: 100,
+      stageText: 'Pipeline Complete: Real Pipeline A execution finished successfully.',
+      validationTests: 26,
+    };
+  }
+
+  const stageStatus = status?.stage_status ?? {};
+  const validationTests = extractValidationProgress(status?.log_tail);
+
+  if (!testingRunning && !status) {
+    return {
+      percent: Math.max(0, Math.min(100, fallbackStep * 12.5)),
+      stageText: fallbackStep > 0
+        ? `Pipeline ready at stage ${fallbackStep} of 8.`
+        : 'Pipeline Ready: Awaiting Pipeline A execution.',
+      validationTests: 0,
+    };
+  }
+
+  let completedStages = 0;
+  for (const stage of PIPELINE_PROGRESS_STAGES) {
+    const state = stageStatus[stage];
+    if (state === 'COMPLETED' || state === 'PASSED') completedStages += 1;
+  }
+
+  const currentStage = status?.current_stage ?? '';
+  const currentIndex = PIPELINE_PROGRESS_STAGES.indexOf(
+    currentStage as (typeof PIPELINE_PROGRESS_STAGES)[number],
+  );
+
+  let percent = completedStages * 12.5;
+
+  if (currentStage === 'validation' || currentIndex === 5) {
+    // Validation is the only stage with a known internal 26-test contract.
+    // Fill the sixth stage from 62.5% -> 75% using actual test/log progress.
+    percent = 62.5 + (validationTests / 26) * 12.5;
+    if (stageStatus.validation === 'RUNNING' && validationTests === 0) {
+      percent = 63.5;
+    }
+  } else if (currentIndex >= 0 && stageStatus[currentStage] === 'RUNNING') {
+    // For stages without an exposed sub-progress counter, advance to the
+    // midpoint of the active stage. The next stage marker completes it.
+    percent = completedStages * 12.5 + 6.25;
+  } else if (fallbackStep > 0) {
+    percent = Math.max(percent, fallbackStep * 12.5);
+  }
+
+  percent = Math.max(0, Math.min(99, percent));
+
+  const currentLabel = currentIndex >= 0
+    ? `Stage ${currentIndex + 1} of 8: ${currentStage.replace(/_/g, ' ')}`
+    : status?.status === 'QUEUED'
+      ? 'Pipeline queued: preparing Pipeline A…'
+      : 'Pipeline running: waiting for the next stage update…';
+
+  return {
+    percent,
+    stageText: testingRunning
+      ? `Pipeline Active: ${currentLabel}${currentStage === 'validation' ? ` • ${validationTests}/26 validation tests observed` : ''}`
+      : currentLabel,
+    validationTests,
+  };
+}
+
+/* ============================================================
    MAIN UNIFIED DASHBOARD PAGE
    The Gateway of Getting Under the Sea
 ============================================================ */
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Read URL query params
-  const initialDate = searchParams.get('date') || '2024-06-15';
+  // The uploaded scientific file date is authoritative.
+  // A URL date is accepted only when this page is opened from another
+  // connected OceanEmbed page. There is intentionally no stale
+  // localStorage fallback here.
+  const initialDate = searchParams.get('date')?.trim() || '';
   const initialLat = searchParams.get('lat') ? Number(searchParams.get('lat')) : 15.5;
   const initialLon = searchParams.get('lon') ? Number(searchParams.get('lon')) : 88.0;
 
   const [selectedDate, setSelectedDate] = useState<string>(initialDate);
   const [latitude, setLatitude] = useState<number>(initialLat);
   const [longitude, setLongitude] = useState<number>(initialLon);
+
+  // Keep the current input date synchronized across Dashboard -> WorldMap -> Surface -> 3D.
+  const setAuthoritativeDate = useCallback((date: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+
+    setSelectedDate(date);
+    localStorage.setItem('ocean_input_date', date);
+    localStorage.setItem('ocean_shared_date', date);
+
+    const params = new URLSearchParams(searchParams);
+    params.set('date', date);
+    setSearchParams(params, { replace: true });
+
+    window.dispatchEvent(
+      new CustomEvent('ocean-input-date-changed', {
+        detail: { date },
+      }),
+    );
+  }, [searchParams, setSearchParams]);
+
+  // Recover a date changed by another OceanEmbed page while Dashboard is mounted.
+  useEffect(() => {
+    const syncDate = () => {
+      const nextDate =
+        searchParams.get('date')?.trim() ||
+        localStorage.getItem('ocean_input_date')?.trim() ||
+        localStorage.getItem('ocean_shared_date')?.trim() ||
+        '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(nextDate) && nextDate !== selectedDate) {
+        setSelectedDate(nextDate);
+      }
+    };
+
+    const onCustomDateChange = (event: Event) => {
+      const custom = event as CustomEvent<{ date?: string }>;
+      const nextDate = custom.detail?.date?.trim() || '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+        setSelectedDate(nextDate);
+      }
+    };
+
+    window.addEventListener('storage', syncDate);
+    window.addEventListener('visibilitychange', syncDate);
+    window.addEventListener('ocean-input-date-changed', onCustomDateChange);
+
+    return () => {
+      window.removeEventListener('storage', syncDate);
+      window.removeEventListener('visibilitychange', syncDate);
+      window.removeEventListener('ocean-input-date-changed', onCustomDateChange);
+    };
+  }, [searchParams, selectedDate]);
+
+  // Persist the selected date whenever it changes.
+  useEffect(() => {
+    if (!selectedDate) return;
+    localStorage.setItem('ocean_input_date', selectedDate);
+    localStorage.setItem('ocean_shared_date', selectedDate);
+  }, [selectedDate]);
 
   // Sliding telemetry card subpage state ('drift' or 'surface')
   const [telemetrySlide, setTelemetrySlide] = useState<'drift' | 'surface'>(() => {
@@ -565,8 +895,11 @@ export default function DashboardPage() {
   const [uploads, setUploads] = useState<Partial<Record<SlotId, UploadedFile>>>({});
   const [parsing, setParsing] = useState<Partial<Record<SlotId, boolean>>>({});
   const [testingRunning, setTestingRunning] = useState(false);
-  const [testsPassed, setTestsPassed] = useState(true);
-  const [pipelineStep, setPipelineStep] = useState<number>(5); // 1 to 5 stages completed
+  const [testsPassed, setTestsPassed] = useState(false);
+  const [pipelineStep, setPipelineStep] = useState<number>(8);
+  const [pipelineJobId, setPipelineJobId] = useState<string | null>(null);
+  const [pipelineStatus, setPipelineStatus] = useState<PipelineAStatusResponse | null>(null);
+  const [pipelineResult, setPipelineResult] = useState<any>(null);
 
   // Live Backend telemetry data
   const [surfaceData, setSurfaceData] = useState<Awaited<ReturnType<typeof fetchSurface>> | null>(null);
@@ -577,6 +910,12 @@ export default function DashboardPage() {
     let cancelled = false;
 
     async function loadSurface() {
+      if (!selectedDate) {
+        setSurfaceData(null);
+        setSurfaceLoading(false);
+        return;
+      }
+
       try {
         setSurfaceLoading(true);
         const data = await fetchSurface(selectedDate);
@@ -605,14 +944,26 @@ export default function DashboardPage() {
 
   // Determine if user has provided input data
   const hasUserInput = useMemo(() => {
-    return Object.keys(uploads).some((key) => uploads[key as SlotId]?.status === 'ready');
+    return Object.keys(uploads).some((key) => {
+      const status = uploads[key as SlotId]?.status;
+      return status === 'ready' || status === 'partial';
+    });
   }, [uploads]);
 
   const hasUploadErrors = useMemo(() => {
     return Object.keys(uploads).some((key) => uploads[key as SlotId]?.status === 'error');
   }, [uploads]);
 
-  // Handle file uploads
+  // Dynamic input coverage bar: grows as each of the five feeds is supplied.
+  const uploadedInputCount = useMemo(
+    () => FILE_SLOTS.filter((slot) => Boolean(uploads[slot.id])).length,
+    [uploads],
+  );
+  const inputCoveragePercent = Math.round(
+    (uploadedInputCount / FILE_SLOTS.length) * 100,
+  );
+
+  // Handle raw scientific file upload: the backend performs the real inspection.
   const handleFileUpload = useCallback(
     async (slotId: SlotId, file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -632,58 +983,141 @@ export default function DashboardPage() {
             lon: longitude,
             location: 'Invalid Dataset',
             status: 'error',
-            errorMsg: `Invalid file format ".${ext}". Expected NetCDF (.nc/.h5).`,
+            errorMsg: `Invalid file format ".${ext}". Expected NetCDF (.nc/.nc4/.netcdf) or HDF5 (.h5/.hdf5).`,
           },
         }));
         return;
       }
 
       setParsing((prev) => ({ ...prev, [slotId]: true }));
-      setUploads((prev) => {
-        const next = { ...prev };
-        delete next[slotId];
-        return next;
-      });
-
-      await new Promise((r) => setTimeout(r, 350));
-
-      // Synthetic extraction for demonstration based on parameter
-      let extractedValue = dailyParams.sst;
-      if (slotId === 'sss') extractedValue = dailyParams.sss;
-      if (slotId === 'ssh') extractedValue = dailyParams.ssh;
-      if (slotId === 'currents') extractedValue = 0.32;
-      if (slotId === 'winds') extractedValue = 8.4;
-
-      setUploads((prev) => ({
-        ...prev,
-        [slotId]: {
+      try {
+        const response = await inspectPipelineAFile(
+          slotId as PipelineASlot,
           file,
-          name: file.name,
-          sizeLabel:
-            file.size > 1e6
-              ? `${(file.size / 1e6).toFixed(1)} MB`
-              : `${(file.size / 1e3).toFixed(0)} KB`,
-          parsedVars: [NC_VARIABLE_SPEC[slotId].variables[0]],
-          extractedValues: { [slotId]: extractedValue },
-          date: selectedDate,
-          lat: latitude,
-          lon: longitude,
-          location: `${latitude}°N, ${longitude}°E`,
-          status: 'ready',
-          validationDetails: {
-            cf18: true,
-            domainBounds: true,
-            physicalRange: true,
-            qualityPassed: true,
-          },
-        },
-      }));
+          selectedDate || undefined,
+        );
+        const inspection = response.files?.[slotId as PipelineASlot];
+        const inspectionVariables = inspection?.variables ?? [];
 
-      setParsing((prev) => ({ ...prev, [slotId]: false }));
-      setTestsPassed(true);
-      setPipelineStep(5);
+        // The NetCDF/HDF5 observation date is the source of truth.
+        const detectedFileDate =
+          inspection?.time?.start?.slice(0, 10) ||
+          response.target_date?.slice(0, 10) ||
+          inferObservationDateFromFilename(file.name) ||
+          selectedDate ||
+          localStorage.getItem('ocean_input_date')?.slice(0, 10) ||
+          localStorage.getItem('ocean_shared_date')?.slice(0, 10) ||
+          '';
+
+        if (detectedFileDate && !selectedDate) {
+          setAuthoritativeDate(detectedFileDate);
+        }
+        const variableValidation = validateScientificVariables(slotId, inspectionVariables);
+        const backendErrors = inspection?.errors ?? [];
+        const partialVectorComponent = variableValidation.partial;
+        const nonParameterBackendErrors = partialVectorComponent
+          ? backendErrors.filter((message: string) => !String(message).toLowerCase().startsWith('parameter mismatch'))
+          : backendErrors;
+        const validationErrors = variableValidation.valid
+          ? nonParameterBackendErrors
+          : partialVectorComponent
+            ? nonParameterBackendErrors
+            : [...backendErrors, variableValidation.reason || 'Dataset parameter does not match the selected slot.'];
+        const existingInputDates = FILE_SLOTS
+          .map((slot) => uploads[slot.id]?.date)
+          .filter((value): value is string => Boolean(value));
+        if (
+          detectedFileDate &&
+          existingInputDates.length > 0 &&
+          existingInputDates.some((existingDate) => existingDate !== detectedFileDate)
+        ) {
+          validationErrors.push(
+            `Date mismatch: this file is ${detectedFileDate}, but the existing input feed(s) use ${existingInputDates[0]}. All five inputs must represent the same observation date.`,
+          );
+        }
+        const warnings = inspection?.warnings ?? [];
+        const firstNumeric = (
+          Object.entries(inspection?.statistics ?? {}) as [
+            string,
+            { mean?: number | null },
+          ][]
+        )
+          .map(([name, stats]) => ({
+            name,
+            mean: stats?.mean ?? null,
+          }))
+          .find((item) => Number.isFinite(item.mean));
+
+        const coordinates = inspection?.coordinates ?? {};
+        const latCoord = Object.entries(coordinates).find(([name]) => /^(lat|latitude)$/i.test(name));
+        const lonCoord = Object.entries(coordinates).find(([name]) => /^(lon|longitude)$/i.test(name));
+
+        const latValue = Number(latCoord?.[1] && typeof latCoord[1] === 'object' ? (latCoord[1] as any).min : latitude);
+        const lonValue = Number(lonCoord?.[1] && typeof lonCoord[1] === 'object' ? (lonCoord[1] as any).min : longitude);
+
+        const ok = validationErrors.length === 0;
+        setUploads((prev) => ({
+          ...prev,
+          [slotId]: {
+            file,
+            name: file.name,
+            sizeLabel:
+              file.size > 1e6
+                ? `${(file.size / 1e6).toFixed(1)} MB`
+                : `${(file.size / 1e3).toFixed(0)} KB`,
+            parsedVars: inspection?.variables ?? [],
+            extractedValues: firstNumeric?.mean != null
+              ? { [slotId]: Number(firstNumeric.mean) }
+              : {},
+            date: detectedFileDate || selectedDate,
+            lat: Number.isFinite(latValue) ? latValue : latitude,
+            lon: Number.isFinite(lonValue) ? lonValue : longitude,
+            location: inspection?.time?.start
+              ? `Backend inspected • ${inspection.time.start.slice(0, 10)}`
+              : 'Backend inspected',
+            status: validationErrors.length
+              ? 'error'
+              : partialVectorComponent
+                ? 'partial'
+                : 'ready',
+            errorMsg: validationErrors.length
+              ? validationErrors.join(' | ')
+              : partialVectorComponent
+                ? (variableValidation.reason || 'Accepted component; companion vector component still required.')
+                : warnings.length
+                  ? `Warning: ${warnings.join(' | ')}`
+                  : undefined,
+            backendInspection: inspection,
+          },
+        }));
+
+        setTestsPassed(false);
+        setPipelineStep(0);
+        setPipelineResult(null);
+        setPipelineStatus(null);
+        setPipelineJobId(null);
+      } catch (error) {
+        setUploads((prev) => ({
+          ...prev,
+          [slotId]: {
+            file,
+            name: file.name,
+            sizeLabel: `${(file.size / 1e6).toFixed(1)} MB`,
+            parsedVars: [],
+            extractedValues: {},
+            date: selectedDate,
+            lat: latitude,
+            lon: longitude,
+            location: 'Backend inspection failed',
+            status: 'error',
+            errorMsg: error instanceof Error ? error.message : String(error),
+          },
+        }));
+      } finally {
+        setParsing((prev) => ({ ...prev, [slotId]: false }));
+      }
     },
-    [selectedDate, latitude, longitude, dailyParams]
+    [selectedDate, latitude, longitude]
   );
 
   const removeUpload = (slotId: SlotId) => {
@@ -698,6 +1132,10 @@ export default function DashboardPage() {
     setUploads({});
     setTestsPassed(false);
     setPipelineStep(0);
+    setPipelineJobId(null);
+    setPipelineStatus(null);
+    setPipelineResult(null);
+    setTestingRunning(false);
   };
 
   // 1-Click Operational Sample Presets
@@ -707,7 +1145,7 @@ export default function DashboardPage() {
     const lat = isBoB ? 15.5 : 18.25;
     const lon = isBoB ? 88.0 : 64.5;
 
-    setSelectedDate(presetDate);
+    setAuthoritativeDate(presetDate);
     setLatitude(lat);
     setLongitude(lon);
 
@@ -773,22 +1211,176 @@ export default function DashboardPage() {
     setPipelineStep(5);
   };
 
-  // Run verification tests on user data (Stages 1 through 5)
+  // Run the real 8-stage Pipeline A against the five uploaded feeds.
   const runVerificationPipeline = async () => {
+    const slots: SlotId[] = ['sst', 'sss', 'ssh', 'currents', 'winds'];
+    const files: Partial<Record<PipelineASlot, File>> = {};
+
+    for (const slot of slots) {
+      const upload = uploads[slot];
+      const file = upload?.file;
+      if (upload?.status === 'ready' && file) {
+        files[slot] = file;
+      }
+    }
+
+    const invalidSlots = slots.filter((slot) => uploads[slot]?.status !== 'ready');
+    if (invalidSlots.length > 0 || slots.some((slot) => !files[slot])) {
+      setTestsPassed(false);
+      return;
+    }
+
     setTestingRunning(true);
     setTestsPassed(false);
-    setPipelineStep(1);
-    await new Promise((r) => setTimeout(r, 450));
-    setPipelineStep(2);
-    await new Promise((r) => setTimeout(r, 450));
-    setPipelineStep(3);
-    await new Promise((r) => setTimeout(r, 450));
-    setPipelineStep(4);
-    await new Promise((r) => setTimeout(r, 450));
-    setPipelineStep(5);
-    await new Promise((r) => setTimeout(r, 350));
-    setTestingRunning(false);
-    setTestsPassed(true);
+    setPipelineStep(0);
+    setPipelineStatus(null);
+    setPipelineResult(null);
+
+    try {
+      const fileDates = slots
+        .map((slot) => uploads[slot]?.date?.slice(0, 10) || '')
+        .filter((value): value is string => /^\d{4}-\d{2}-\d{2}$/.test(value));
+
+      const runDate =
+        selectedDate ||
+        fileDates[0] ||
+        localStorage.getItem('ocean_input_date')?.slice(0, 10) ||
+        localStorage.getItem('ocean_shared_date')?.slice(0, 10) ||
+        '';
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) {
+        throw new Error(
+          'Could not resolve the observation date from the uploaded scientific files. Upload files containing a NetCDF time coordinate or a filename with YYYY-MM-DD / YYYYMMDD.'
+        );
+      }
+
+      const mismatchedDates = fileDates.filter((date) => date !== runDate);
+      if (mismatchedDates.length > 0) {
+        throw new Error(
+          `Uploaded feeds contain different observation dates. Expected ${runDate}, detected ${Array.from(new Set(fileDates)).join(', ')}.`
+        );
+      }
+
+      if (selectedDate !== runDate) {
+        setAuthoritativeDate(runDate);
+      }
+
+      // Keep the pipeline visibly active while the backend creates the job.
+      setPipelineStep(1);
+      const started = await uploadPipelineA(files, runDate);
+      setPipelineJobId(started.job_id);
+
+      let finished = false;
+      let consecutiveStatusErrors = 0;
+      const MAX_STATUS_ERRORS = 180; // ~6 minutes at 2s polling
+
+      while (!finished) {
+        try {
+          const status = await fetchPipelineAStatus(started.job_id);
+          consecutiveStatusErrors = 0;
+          setPipelineStatus(status);
+
+          const order = [
+            'ingestion',
+            'cleaning',
+            'harmonization',
+            'harmonization_verification',
+            'ocean_nan_fill',
+            'validation',
+            'model_ready',
+            'inference',
+          ];
+          const activeIndex = order.indexOf(status.current_stage);
+          const stageStatus = status.stage_status ?? {};
+          const runningIndex = order.findIndex((stage) => stageStatus[stage] === 'RUNNING');
+          const completedCount = order.filter(
+            (stage) => stageStatus[stage] === 'COMPLETED' || stageStatus[stage] === 'PASSED',
+          ).length;
+
+          // Prefer the backend's explicit RUNNING stage, then current_stage,
+          // then completed-stage count. This keeps the UI moving even if one
+          // status field lags by a polling interval.
+          const reportedStep =
+            runningIndex >= 0
+              ? runningIndex + 1
+              : activeIndex >= 0
+                ? activeIndex + 1
+                : completedCount;
+
+          if (reportedStep >= 0) {
+            setPipelineStep(Math.max(0, Math.min(8, reportedStep)));
+          }
+
+          if (status.status === 'SUCCESS') {
+            setPipelineStep(8);
+            setTestsPassed(true);
+            setPipelineResult(status.result ?? status);
+
+            // Hand the completed user-input session directly to WorldMap.
+            // The observation date comes from the successful Pipeline A job
+            // (fallback: the authoritative detected file date).
+            const completedDate =
+              status.selected_dates?.[0]?.slice(0, 10) ||
+              selectedDate ||
+              localStorage.getItem('ocean_input_date')?.slice(0, 10) ||
+              localStorage.getItem('ocean_shared_date')?.slice(0, 10) ||
+              '';
+            if (completedDate) {
+              localStorage.setItem('ocean_input_date', completedDate);
+              localStorage.setItem('ocean_shared_date', completedDate);
+
+              navigate(
+                `/worldmap?date=${encodeURIComponent(completedDate)}&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`
+              );
+            }
+
+            finished = true;
+          } else if (status.status === 'FAILED') {
+            setTestsPassed(false);
+            setPipelineResult(null);
+            finished = true;
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        } catch (statusError) {
+          // A temporary backend hiccup must NOT mark the scientific pipeline
+          // as failed. Keep the same job alive and resume polling.
+          consecutiveStatusErrors += 1;
+          const message = statusError instanceof Error ? statusError.message : String(statusError);
+          setPipelineStatus((prev: PipelineAStatusResponse | null) => ({
+            ...(prev ?? {
+              success: false,
+              job_id: started.job_id,
+              status: 'RUNNING',
+              current_stage: 'reconnecting',
+              stage_status: {},
+            }),
+            status: 'RUNNING',
+            current_stage: prev?.current_stage ?? 'reconnecting',
+            transient_error: `Backend status check temporarily unavailable (${consecutiveStatusErrors}/${MAX_STATUS_ERRORS}): ${message}`,
+          } as PipelineAStatusResponse));
+
+          if (consecutiveStatusErrors >= MAX_STATUS_ERRORS) {
+            throw new Error(`Pipeline status endpoint remained unavailable for ~${Math.round((MAX_STATUS_ERRORS * 2) / 60)} minutes.`);
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+    } catch (error) {
+      setTestsPassed(false);
+      setPipelineResult(null);
+      setPipelineStatus({
+        success: false,
+        job_id: pipelineJobId ?? '',
+        status: 'FAILED',
+        current_stage: 'failed',
+        stage_status: {},
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setTestingRunning(false);
+    }
   };
 
   // Extracted parameters calculation: User upload > Copernicus live > Daily physics baseline
@@ -864,6 +1456,16 @@ export default function DashboardPage() {
     return points;
   }, [selectedDate, latitude, longitude, extractedSST, extractedOHC]);
 
+  const pipelineProgress = useMemo(() =>
+    calculatePipelineProgress(
+      pipelineStatus,
+      testingRunning,
+      testsPassed,
+      pipelineStep,
+    ),
+    [pipelineStatus, testingRunning, testsPassed, pipelineStep],
+  );
+
   const provenanceLabel = hasUserInput ? 'User NetCDF Verified' : 'Copernicus CMEMS L4';
 
   return (
@@ -900,7 +1502,7 @@ export default function DashboardPage() {
         ══════════════════════════════════════════════════════════════════════ */}
         <section className="space-y-4">
           <WhiteCard className="p-6 space-y-6">
-            {/* Input Controls Bar: Date, Lat, Lon, Presets */}
+            {/* Input Controls Bar: Spatial Coordinates & Presets */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
               <div className="space-y-1">
                 <span className="text-[10.5px] uppercase font-mono font-bold text-[#005088] tracking-wider block">
@@ -911,20 +1513,8 @@ export default function DashboardPage() {
                 </h3>
               </div>
 
-              {/* Dynamic Inputs: Calendar Date & Coordinates */}
+              {/* Dynamic Inputs: Coordinates & Presets */}
               <div className="flex flex-wrap items-center gap-3">
-                {/* Date Picker */}
-                <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-1.5 border border-slate-200">
-                  <Calendar size={15} className="text-[#005088]" />
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    max={format(new Date(), 'yyyy-MM-dd')}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-transparent text-xs font-mono font-bold text-slate-800 focus:outline-none cursor-pointer"
-                  />
-                </div>
-
                 {/* Latitude Input */}
                 <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl px-3 py-1.5 border border-slate-200">
                   <span className="text-[10px] font-mono text-slate-500 font-bold">LAT:</span>
@@ -994,6 +1584,41 @@ export default function DashboardPage() {
               ))}
             </div>
 
+            {/* ── DYNAMIC INPUT COVERAGE BAR ─────────────────────────────────────── */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-mono">
+                <span className="font-black text-[#005088]">
+                  INPUT COVERAGE
+                </span>
+                <span className="font-bold text-slate-600">
+                  {uploadedInputCount}/{FILE_SLOTS.length} feeds supplied
+                </span>
+              </div>
+
+              <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200 border border-slate-300">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-500 transition-[width] duration-500 ease-out"
+                  style={{ width: `${inputCoveragePercent}%` }}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+                <span className="text-slate-500">
+                  {uploadedInputCount === 0
+                    ? 'Awaiting scientific NetCDF/HDF5 feeds…'
+                    : uploadedInputCount < FILE_SLOTS.length
+                      ? 'Add the remaining feeds to complete the observation set.'
+                      : 'All five required feeds supplied.'}
+                </span>
+
+                {selectedDate && (
+                  <span className="font-black text-emerald-700">
+                    Detected observation date: {selectedDate}
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* ── INTELLIGENT PIPELINE EXECUTION DISPLAY (Extended Visual Pipeline, No Raw Logs) ── */}
             {hasUserInput ? (
               /* Case 1: User data is available -> Extended Visual Testing Pipeline */
@@ -1012,16 +1637,16 @@ export default function DashboardPage() {
                         {testingRunning ? (
                           <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 font-mono text-[10.5px] font-bold">
                             <Loader2 size={11} className="animate-spin text-amber-800" />
-                            Executing Stage {pipelineStep} of 5
+                            Executing Stage {pipelineStep} of 8
                           </span>
                         ) : testsPassed ? (
                           <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono text-[10.5px] font-black">
                             <CheckCircle2 size={11} className="text-emerald-600" />
-                            All 5 Verification Gates Passed
+                            Pipeline A Complete
                           </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-900 font-mono text-[10.5px] font-bold">
-                            Custom Feeds Staged
+                            Custom Feeds Staged • Ready to Run
                           </span>
                         )}
                       </div>
@@ -1040,7 +1665,7 @@ export default function DashboardPage() {
                       {testingRunning ? (
                         <>
                           <Loader2 size={14} className="animate-spin" />
-                          <span>Testing Pipeline Running ({pipelineStep}/5)...</span>
+                          <span>Pipeline A Running ({pipelineStep}/8)...</span>
                         </>
                       ) : (
                         <>
@@ -1052,191 +1677,125 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Animated Pipeline Progress Bar */}
+                {/* Real-time Pipeline Progress Bar */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-mono">
-                    <span className="text-slate-600 font-bold flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${testingRunning ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
-                      {testingRunning
-                        ? `Pipeline Active: Running verification test ${pipelineStep} of 5...`
-                        : 'Pipeline Complete: All 5 validation checks passed with 100% integrity.'}
+                    <span className="text-slate-600 font-bold flex items-center gap-1.5 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          testingRunning
+                            ? 'bg-amber-500 animate-ping'
+                            : testsPassed
+                              ? 'bg-emerald-500'
+                              : 'bg-slate-300'
+                        }`}
+                      />
+                      <span className="truncate">{pipelineProgress.stageText}</span>
                     </span>
-                    <span className="font-black text-[#005088]">
-                      {Math.round((pipelineStep / 5) * 100)}% Verified
+                    <span className="font-black text-[#005088] shrink-0 ml-3">
+                      {Math.round(pipelineProgress.percent)}% Pipeline
                     </span>
                   </div>
-                  <div className="h-2 w-full bg-amber-200/60 rounded-full overflow-hidden shadow-inner">
+
+                  <div className="relative h-3 w-full bg-amber-100/80 rounded-full overflow-hidden shadow-inner border border-amber-200/70">
                     <div
-                      className="h-full bg-gradient-to-r from-amber-500 via-sky-500 to-emerald-500 rounded-full transition-all duration-500 ease-out"
-                      style={{ width: `${(pipelineStep / 5) * 100}%` }}
+                      className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-500 via-sky-500 to-emerald-500 transition-[width] duration-700 ease-out"
+                      style={{ width: `${pipelineProgress.percent}%` }}
                     />
+
+                    {testingRunning && pipelineProgress.percent < 100 && (
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full opacity-30 animate-pulse"
+                        style={{ width: `${pipelineProgress.percent}%` }}
+                      />
+                    )}
                   </div>
+
+                  {testingRunning && pipelineStatus?.current_stage === 'validation' && (
+                    <div className="flex items-center justify-between text-[9.5px] font-mono text-amber-800">
+                      <span>Actual validation progress detected from Pipeline A output</span>
+                      <span className="font-black">{pipelineProgress.validationTests}/26 tests</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* 5 Visual Pipeline Stage Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-1">
-                  {/* Stage 1 */}
-                  <div
-                    className={`p-3 rounded-xl border transition-all duration-300 ${pipelineStep >= 1
-                      ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
-                      : 'bg-white/60 border-slate-200 opacity-60'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
-                        Gate 01
-                      </span>
-                      {pipelineStep >= 1 ? (
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                      ) : (
-                        <span className="w-2 h-2 rounded-full bg-slate-300" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                      <FileText size={13} className="text-[#005088]" />
-                      <span>CF-1.8 Metadata</span>
-                    </div>
-                    <p className="text-[10px] text-slate-600 mt-1 leading-tight">
-                      HDF5 schema &amp; variable standard naming verified.
-                    </p>
-                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 text-[9.5px] font-mono font-bold text-emerald-800">
-                      {pipelineStep >= 1 ? '✓ Format Validated' : 'Queued'}
-                    </div>
-                  </div>
+                {/* Real Pipeline A stage cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+                  {[
+                    ['01', 'Ingestion & Discovery', 'Reads and registers the uploaded scientific feeds.'],
+                    ['02', 'Sanitization & De-dup', 'Runs the existing Pipeline A cleaning stage.'],
+                    ['03', '0.25° Spatial Harmonization', 'Regrids to 101 × 241 over 5–30°N, 45–105°E.'],
+                    ['04', 'Coordinate Verification', 'Checks coordinates, bounds, CF metadata and units.'],
+                    ['05', 'Ocean-Only NaN Fill', 'Fills marine gaps while preserving land NaNs.'],
+                    ['06', '26 Scientific Validation Tests', 'Runs the actual validation gates; failures stop the run.'],
+                    ['07', 'Step-9 Tensor Synthesis', 'Builds the canonical 7 × 7 × 101 × 241 model input.'],
+                    ['08', 'Deep Subsurface Inference', 'Runs CNN + Swin + ConvGRU and produces 15 depths.'],
+                  ].map(([num, title, description], index) => {
+                    const stageIds = [
+                      'ingestion',
+                      'cleaning',
+                      'harmonization',
+                      'harmonization_verification',
+                      'ocean_nan_fill',
+                      'validation',
+                      'model_ready',
+                      'inference',
+                    ];
+                    const stageId = stageIds[index];
+                    const backendStage = pipelineStatus?.stage_status?.[stageId];
+                    const completed = backendStage === 'COMPLETED' || pipelineStep >= index + 1 && !testingRunning;
+                    const running = backendStage === 'RUNNING' || (testingRunning && pipelineStep === index + 1);
+                    const failed = pipelineStatus?.status === 'FAILED' && pipelineStatus.current_stage === stageId;
 
-                  {/* Stage 2 */}
-                  <div
-                    className={`p-3 rounded-xl border transition-all duration-300 ${pipelineStep >= 2
-                      ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
-                      : pipelineStep === 1 && testingRunning
-                        ? 'bg-amber-50 border-amber-300 shadow-xs'
-                        : 'bg-white/60 border-slate-200 opacity-60'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
-                        Gate 02
-                      </span>
-                      {pipelineStep >= 2 ? (
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                      ) : pipelineStep === 1 && testingRunning ? (
-                        <Loader2 size={13} className="animate-spin text-amber-600" />
-                      ) : (
-                        <span className="w-2 h-2 rounded-full bg-slate-300" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                      <Thermometer size={13} className="text-[#005088]" />
-                      <span>Thermodynamics</span>
-                    </div>
-                    <p className="text-[10px] text-slate-600 mt-1 leading-tight">
-                      SST: 15–35°C · SSS: 25–42 PSU · SSH: ±100cm.
-                    </p>
-                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 text-[9.5px] font-mono font-bold text-emerald-800">
-                      {pipelineStep >= 2 ? '✓ Bounds Confirmed' : pipelineStep === 1 && testingRunning ? 'Testing...' : 'Queued'}
-                    </div>
-                  </div>
-
-                  {/* Stage 3 */}
-                  <div
-                    className={`p-3 rounded-xl border transition-all duration-300 ${pipelineStep >= 3
-                      ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
-                      : pipelineStep === 2 && testingRunning
-                        ? 'bg-amber-50 border-amber-300 shadow-xs'
-                        : 'bg-white/60 border-slate-200 opacity-60'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
-                        Gate 03
-                      </span>
-                      {pipelineStep >= 3 ? (
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                      ) : pipelineStep === 2 && testingRunning ? (
-                        <Loader2 size={13} className="animate-spin text-amber-600" />
-                      ) : (
-                        <span className="w-2 h-2 rounded-full bg-slate-300" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                      <Compass size={13} className="text-[#005088]" />
-                      <span>Spatial Topology</span>
-                    </div>
-                    <p className="text-[10px] text-slate-600 mt-1 leading-tight">
-                      0.25° WGS-84 North Indian Ocean grid mapping.
-                    </p>
-                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 text-[9.5px] font-mono font-bold text-emerald-800">
-                      {pipelineStep >= 3 ? '✓ Grid Co-registered' : pipelineStep === 2 && testingRunning ? 'Aligning...' : 'Queued'}
-                    </div>
-                  </div>
-
-                  {/* Stage 4 */}
-                  <div
-                    className={`p-3 rounded-xl border transition-all duration-300 ${pipelineStep >= 4
-                      ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
-                      : pipelineStep === 3 && testingRunning
-                        ? 'bg-amber-50 border-amber-300 shadow-xs'
-                        : 'bg-white/60 border-slate-200 opacity-60'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
-                        Gate 04
-                      </span>
-                      {pipelineStep >= 4 ? (
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                      ) : pipelineStep === 3 && testingRunning ? (
-                        <Loader2 size={13} className="animate-spin text-amber-600" />
-                      ) : (
-                        <span className="w-2 h-2 rounded-full bg-slate-300" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                      <Calendar size={13} className="text-[#005088]" />
-                      <span>Temporal Sync</span>
-                    </div>
-                    <p className="text-[10px] text-slate-600 mt-1 leading-tight">
-                      Synchronized to production date: {selectedDate}.
-                    </p>
-                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 text-[9.5px] font-mono font-bold text-emerald-800">
-                      {pipelineStep >= 4 ? '✓ Δt = 0.0h latency' : pipelineStep === 3 && testingRunning ? 'Syncing...' : 'Queued'}
-                    </div>
-                  </div>
-
-                  {/* Stage 5 */}
-                  <div
-                    className={`p-3 rounded-xl border transition-all duration-300 ${pipelineStep >= 5
-                      ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
-                      : pipelineStep === 4 && testingRunning
-                        ? 'bg-amber-50 border-amber-300 shadow-xs'
-                        : 'bg-white/60 border-slate-200 opacity-60'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
-                        Gate 05
-                      </span>
-                      {pipelineStep >= 5 ? (
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                      ) : pipelineStep === 4 && testingRunning ? (
-                        <Loader2 size={13} className="animate-spin text-amber-600" />
-                      ) : (
-                        <span className="w-2 h-2 rounded-full bg-slate-300" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                      <Sparkles size={13} className="text-[#005088]" />
-                      <span>Feature Synthesis</span>
-                    </div>
-                    <p className="text-[10px] text-slate-600 mt-1 leading-tight">
-                      Extracted SST, OHC, MLD, SSS, SSH, D26.
-                    </p>
-                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 text-[9.5px] font-mono font-bold text-emerald-800">
-                      {pipelineStep >= 5 ? '✓ 6 Features Extracted' : pipelineStep === 4 && testingRunning ? 'Extracting...' : 'Queued'}
-                    </div>
-                  </div>
+                    return (
+                      <div
+                        key={stageId}
+                        className={`p-3 rounded-xl border transition-all duration-300 ${
+                          failed
+                            ? 'bg-rose-50 border-rose-300'
+                            : completed
+                              ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
+                              : running
+                                ? 'bg-amber-50 border-amber-300 shadow-xs'
+                                : 'bg-white/60 border-slate-200 opacity-70'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
+                            Gate {num}
+                          </span>
+                          {failed ? (
+                            <XCircle size={13} className="text-rose-600" />
+                          ) : completed ? (
+                            <CheckCircle2 size={13} className="text-emerald-600" />
+                          ) : running ? (
+                            <Loader2 size={13} className="animate-spin text-amber-600" />
+                          ) : (
+                            <span className="w-2 h-2 rounded-full bg-slate-300" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                          <Cpu size={13} className="text-[#005088]" />
+                          <span>{title}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-600 mt-1 leading-tight">
+                          {description}
+                        </p>
+                        <div className={`mt-2 pt-1.5 border-t text-[9.5px] font-mono font-bold ${
+                          failed ? 'border-rose-200 text-rose-800'
+                            : completed ? 'border-emerald-200/60 text-emerald-800'
+                              : running ? 'border-amber-200 text-amber-800'
+                                : 'border-slate-200 text-slate-500'
+                        }`}>
+                          {failed ? '✕ Failed'
+                            : completed ? '✓ Completed'
+                              : running ? 'Running…'
+                                : 'Queued'}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-
                 {/* Verified Parameters Telemetry Ribbon (Direct pipeline outputs) */}
                 <div className="pt-2 border-t border-amber-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2 text-slate-700 font-bold">
@@ -1667,15 +2226,31 @@ export default function DashboardPage() {
 
               <div className="flex items-center shrink-0">
                 <button
-                  onClick={() => navigate('/worldmap')}
+                  onClick={() => {
+                    if (!selectedDate) return;
+                    setAuthoritativeDate(selectedDate);
+                    navigate(`/worldmap?date=${encodeURIComponent(selectedDate)}&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`);
+                  }}
                   className="px-6 py-3 rounded-full bg-white hover:bg-slate-100 text-[#005088] font-black text-xs sm:text-sm shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
-                  <Map size={16} className="text-[#005088]" />
+                  <MapIcon size={16} className="text-[#005088]" />
                   <span>Choose Location on Map</span>
                 </button>
               </div>
             </div>
           </div>
+        </section>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 5: SURFACE SATELLITE OBSERVATIONS — EMBEDDED CONTENT ONLY
+            No PageLayout / Navbar / global header is rendered here.
+        ══════════════════════════════════════════════════════════════════════ */}
+        <section className="mt-10">
+          <SurfaceObservationEmbedded
+            date={selectedDate}
+            lat={latitude}
+            lon={longitude}
+          />
         </section>
       </main>
 

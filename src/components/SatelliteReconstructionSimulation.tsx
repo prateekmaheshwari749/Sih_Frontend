@@ -215,40 +215,39 @@ export default function SatelliteReconstructionSimulation() {
   const currentTempAtSelectedDepth = subsurfaceProfile.temps[selectedIdx] ?? 0;
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-cyan-500/30 light-panel dark-panel shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
+    <div className="relative rounded-3xl overflow-hidden border border-sky-200 dark:border-cyan-500/30 light-panel dark-panel shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
       {/* Top Banner */}
-      <div className="p-4 sm:p-5 border-b border-white/10 light-banner dark:bg-black/50 backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="p-4 sm:p-5 border-b border-sky-100 light-banner backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4" style={{ backgroundColor: 'rgba(248, 253, 255, 0.95)' }}>
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
-            <span className="text-xs font-mono tracking-wider uppercase text-cyan-300 font-bold">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-ping" />
+            <span className="text-xs font-mono tracking-wider uppercase font-black" style={{ color: '#005088' }}>
               Space Remote Sensing &rarr; Subsurface AI Inversion
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-200 border border-cyan-500/30">
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold border" style={{ backgroundColor: '#e0f2fe', color: '#003865', borderColor: '#7dd3fc' }}>
               Photorealistic 3D Earth &amp; Satellite
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm">
-            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
-              How OCEANINTEL Works: Space Sensors to 1000m Depths
-            </span>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: '#002f52' }}>
+            How OCEANINTEL Works: Space Sensors to 1000m Depths
           </h2>
-          <p className="text-xs sm:text-sm text-sky-100/90 font-medium max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm font-semibold max-w-2xl leading-relaxed" style={{ color: '#003355' }}>
             Satellites measure continuous 2D surface parameters (SST, SSS, SSH Altimetry, and Wind vectors). Our project&apos;s deep learning model ingests those parameters to reconstruct the complete 3D ocean temperature field (0–1000m across 15 depths).
           </p>
         </div>
 
         {/* Mission Selectors */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono">
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-sky-50/90 border border-sky-200 text-xs font-mono">
           {MISSIONS.map((m) => (
             <button
               key={m.id}
               onClick={() => setActiveMission(m)}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className="px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold"
+              style={
                 activeMission.id === m.id
-                  ? 'bg-cyan-500 text-black font-bold shadow-lg shadow-cyan-500/30'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+                  ? { backgroundColor: '#005088', color: '#ffffff', boxShadow: '0 4px 12px rgba(0, 80, 136, 0.3)' }
+                  : { backgroundColor: 'transparent', color: '#003355' }
+              }
             >
               {m.name.split(' ')[0]}
             </button>
@@ -257,9 +256,9 @@ export default function SatelliteReconstructionSimulation() {
       </div>
 
       {/* Target Regional Inspection Strip */}
-      <div className="px-4 py-3 light-subpanel dark:bg-black/60 border-b border-white/10 flex items-center gap-3 overflow-x-auto">
-        <span className="text-xs text-white/40 uppercase tracking-wider font-mono shrink-0 flex items-center gap-1.5">
-          <Radio size={13} className="text-cyan-400 animate-pulse" />
+      <div className="px-4 py-3 light-subpanel border-b border-sky-100 flex items-center gap-3 overflow-x-auto" style={{ backgroundColor: '#f0f9ff' }}>
+        <span className="text-xs uppercase tracking-wider font-mono font-bold shrink-0 flex items-center gap-1.5" style={{ color: '#002f52' }}>
+          <Radio size={13} className="text-[#005088] animate-pulse" />
           Observation Target Footprint:
         </span>
         <div className="flex items-center gap-2">
@@ -270,11 +269,12 @@ export default function SatelliteReconstructionSimulation() {
                 setActiveRegion(r);
                 triggerManualReconstruct();
               }}
-              className={`px-3 py-1 rounded-xl border text-xs font-mono transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              className="px-3 py-1 rounded-xl border text-xs font-mono transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap font-bold"
+              style={
                 activeRegion.id === r.id
-                  ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-200 shadow-md shadow-cyan-500/15'
-                  : 'bg-white/5 border-white/10 text-white/60 hover:text-white'
-              }`}
+                  ? { backgroundColor: '#005088', color: '#ffffff', borderColor: '#003865', boxShadow: '0 2px 8px rgba(0, 80, 136, 0.25)' }
+                  : { backgroundColor: '#ffffff', color: '#002f52', borderColor: '#bae6fd' }
+              }
             >
               <span>{r.name}</span>
               <span className={`text-[9px] px-1.5 py-0.2 rounded-full border ${r.tagColor}`}>
@@ -390,51 +390,51 @@ export default function SatelliteReconstructionSimulation() {
         </div>
 
         {/* Right Column: AI Subsurface Temperature Reconstruction (5 cols) */}
-        <div className="lg:col-span-5 rounded-2xl light-panel-inner dark:bg-white/5 border border-white/10 p-5 space-y-4 flex flex-col justify-between min-h-[580px]">
+        <div className="lg:col-span-5 rounded-2xl light-panel-inner dark:bg-white/5 border border-sky-200 dark:border-white/10 p-5 space-y-4 flex flex-col justify-between min-h-[580px]">
           
           {/* Transformation Header */}
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-1.5">
-                <Cpu size={16} className="text-purple-400 animate-pulse" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                <Cpu size={16} className="text-purple-600 dark:text-purple-400 animate-pulse" />
+                <h3 className="text-sm font-bold text-[#002f52] dark:text-white uppercase tracking-wider">
                   Reconstructed Subsurface Profile
                 </h3>
               </div>
-              <p className="text-[11px] text-white/50">
+              <p className="text-[11px] text-sky-900/70 dark:text-white/50 font-medium">
                 Satellite inputs &rarr; Deep learning embedding &rarr; 0–1000m thermal field
               </p>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30 font-semibold">
               15 Depth Slabs
             </span>
           </div>
 
           {/* Derived Physical Indicators */}
           <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
-            <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-              <span className="text-white/40 block text-[10px]">Mixed Layer (MLD)</span>
-              <span className="text-cyan-300 font-bold text-sm">{subsurfaceProfile.mld} m</span>
+            <div className="p-2.5 rounded-xl bg-sky-50/80 dark:bg-black/40 border border-sky-200 dark:border-white/5">
+              <span className="text-sky-800 dark:text-white/40 block text-[10px] font-semibold">Mixed Layer (MLD)</span>
+              <span className="text-[#005088] dark:text-cyan-300 font-black text-sm">{subsurfaceProfile.mld} m</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-              <span className="text-white/40 block text-[10px]">Thermocline Axis</span>
-              <span className="text-amber-300 font-bold text-sm">{subsurfaceProfile.thermoclineDepth} m</span>
+            <div className="p-2.5 rounded-xl bg-amber-50/80 dark:bg-black/40 border border-amber-200 dark:border-white/5">
+              <span className="text-amber-900 dark:text-white/40 block text-[10px] font-semibold">Thermocline Axis</span>
+              <span className="text-amber-700 dark:text-amber-300 font-black text-sm">{subsurfaceProfile.thermoclineDepth} m</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-black/40 border border-white/5">
-              <span className="text-white/40 block text-[10px]">Ocean Heat (OHC)</span>
-              <span className="text-red-400 font-bold text-sm">{subsurfaceProfile.ohc} <span className="text-[9px] font-normal text-white/40">kJ/cm²</span></span>
+            <div className="p-2.5 rounded-xl bg-red-50/80 dark:bg-black/40 border border-red-200 dark:border-white/5">
+              <span className="text-red-900 dark:text-white/40 block text-[10px] font-semibold">Ocean Heat (OHC)</span>
+              <span className="text-red-600 dark:text-red-400 font-black text-sm">{subsurfaceProfile.ohc} <span className="text-[9px] font-normal text-red-800/70 dark:text-white/40">kJ/cm²</span></span>
             </div>
           </div>
 
           {/* Interactive Depth Level Inspection */}
-          <div className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-2">
+          <div className="p-3 rounded-xl bg-sky-50/80 dark:bg-black/40 border border-sky-200 dark:border-white/10 space-y-2">
             <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-white/60 flex items-center gap-1">
-                <Sparkles size={12} className="text-cyan-400" />
+              <span className="text-sky-900 dark:text-white/60 font-semibold flex items-center gap-1">
+                <Sparkles size={12} className="text-[#005088] dark:text-cyan-400" />
                 Inspect Depth Slab:
               </span>
-              <span className="text-cyan-300 font-bold text-sm">{selectedDepth} Metres</span>
-              <span className="text-emerald-400 font-bold text-sm">{currentTempAtSelectedDepth.toFixed(1)} °C</span>
+              <span className="text-[#005088] dark:text-cyan-300 font-bold text-sm">{selectedDepth} Metres</span>
+              <span className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">{currentTempAtSelectedDepth.toFixed(1)} °C</span>
             </div>
 
             <input
@@ -444,10 +444,10 @@ export default function SatelliteReconstructionSimulation() {
               step={1}
               value={selectedIdx}
               onChange={(e) => setSelectedDepth(DEPTH_LEVELS[+e.target.value])}
-              className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-white/10 rounded-lg appearance-none"
+              className="w-full accent-[#005088] dark:accent-cyan-400 cursor-pointer h-1.5 bg-sky-200 dark:bg-white/10 rounded-lg appearance-none"
             />
 
-            <div className="flex justify-between text-[9px] font-mono text-white/40">
+            <div className="flex justify-between text-[9px] font-mono text-sky-800 dark:text-white/40 font-medium">
               <span>0m (Skin)</span>
               <span>100m (Thermocline)</span>
               <span>500m (Mesopelagic)</span>
@@ -476,18 +476,18 @@ export default function SatelliteReconstructionSimulation() {
                   onClick={() => setSelectedDepth(depth)}
                   className={`w-full text-left flex items-center justify-between p-2 rounded-xl transition-all cursor-pointer text-xs font-mono border ${
                     isSelected
-                      ? 'bg-cyan-500/15 border-cyan-400/50 shadow-md shadow-cyan-500/10'
-                      : 'bg-black/40 border-white/5 hover:border-white/15'
+                      ? 'bg-sky-100 border-[#005088] shadow-sm dark:bg-cyan-500/15 dark:border-cyan-400/50 dark:shadow-md dark:shadow-cyan-500/10'
+                      : 'bg-white border-sky-100 hover:border-sky-300 dark:bg-black/40 dark:border-white/5 dark:hover:border-white/15'
                   }`}
                 >
                   <div className="flex items-center gap-2 w-32">
                     <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-                    <span className="text-white/80 font-semibold">{depth}m</span>
-                    <span className="text-[10px] text-white/30 truncate">{label}</span>
+                    <span className="text-[#002f52] dark:text-white/80 font-bold">{depth}m</span>
+                    <span className="text-[10px] text-sky-800/70 dark:text-white/30 truncate">{label}</span>
                   </div>
 
                   {/* Horizontal visual bar */}
-                  <div className="flex-1 mx-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="flex-1 mx-3 h-1.5 bg-sky-100 dark:bg-white/5 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -507,12 +507,12 @@ export default function SatelliteReconstructionSimulation() {
           </div>
 
           {/* Model Confidence & Validation Badge */}
-          <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-500/25 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-purple-300 font-mono">
+          <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-500/25 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-purple-900 dark:text-purple-300 font-mono font-semibold">
               <CheckCircle2 size={15} />
               <span>ARGO Float RMSE: <strong>&plusmn;0.34 °C</strong></span>
             </div>
-            <span className="text-[10px] font-mono text-white/50">
+            <span className="text-[10px] font-mono text-purple-800 dark:text-white/50">
               Confidence: <strong>94.8%</strong>
             </span>
           </div>
@@ -522,30 +522,30 @@ export default function SatelliteReconstructionSimulation() {
       </div>
 
       {/* Physics Workflow Footer Strip */}
-      <div className="p-4 sm:p-5 light-footer dark:bg-[#010915] border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-bold text-white uppercase text-[11px] tracking-wider text-cyan-300">
+      <div className="p-4 sm:p-5 light-footer dark:bg-[#010915] border-t border-sky-100 dark:border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+        <div className="p-3 rounded-xl bg-white border border-sky-100 dark:bg-white/5 dark:border-white/10 space-y-1 shadow-sm">
+          <p className="font-bold uppercase text-[11px] tracking-wider text-[#005088] dark:text-cyan-300">
             1. Space Sensor Ingestion
           </p>
-          <p className="text-white/60 leading-relaxed">
+          <p className="text-sky-950/80 dark:text-white/60 leading-relaxed font-normal">
             Satellites measure thermal infrared skin radiation (SST), sea surface salinity (SSS), radar altimetry (SSH), and wind scatterometry across continuous daily tracks.
           </p>
         </div>
 
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-bold text-white uppercase text-[11px] tracking-wider text-purple-300">
+        <div className="p-3 rounded-xl bg-white border border-sky-100 dark:bg-white/5 dark:border-white/10 space-y-1 shadow-sm">
+          <p className="font-bold uppercase text-[11px] tracking-wider text-purple-700 dark:text-purple-300">
             2. Deep Learning Projection
           </p>
-          <p className="text-white/60 leading-relaxed">
+          <p className="text-sky-950/80 dark:text-white/60 leading-relaxed font-normal">
             Non-linear air-sea relationships are encoded into latent space representations, capturing how SSH anomalies push the thermocline up or down.
           </p>
         </div>
 
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-bold text-white uppercase text-[11px] tracking-wider text-emerald-300">
+        <div className="p-3 rounded-xl bg-white border border-sky-100 dark:bg-white/5 dark:border-white/10 space-y-1 shadow-sm">
+          <p className="font-bold uppercase text-[11px] tracking-wider text-emerald-700 dark:text-emerald-300">
             3. 3D Subsurface Synthesis
           </p>
-          <p className="text-white/60 leading-relaxed">
+          <p className="text-sky-950/80 dark:text-white/60 leading-relaxed font-normal">
             The decoder reconstructs complete 0–1000m vertical profiles across 15 depth slabs at 0.25° grid, powering cyclone early warning and maritime routing.
           </p>
         </div>

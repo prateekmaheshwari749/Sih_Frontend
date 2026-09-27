@@ -31,6 +31,10 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true, // Listen on all network addresses (0.0.0.0) for LAN/WiFi access
       cors: true,
+      watch: {
+        usePolling: true,
+        interval: 300,
+      },
       hmr: {
         overlay: false, // Disable HMR error overlay (false positives on Google Drive paths)
       },

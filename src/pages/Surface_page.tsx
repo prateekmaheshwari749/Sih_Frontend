@@ -15,9 +15,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
-import PageLayout, { PageContainer, PageHeader } from '../components/PageLayout';
 import {
   fetchSurface,
   type SurfaceResponse,
@@ -279,34 +278,21 @@ function generateSyntheticSurface(date: string): SurfaceResponse {
   };
 }
 
-export default function SurfacePage() {
-  const [searchParams] = useSearchParams();
+export interface SurfaceObservationEmbeddedProps {
+  date: string;
+  lat?: number;
+  lon?: number;
+}
+
+export default function SurfaceObservationEmbedded({ date, lat = 15.5, lon = 88 }: SurfaceObservationEmbeddedProps) {
   const navigate = useNavigate();
-
-  const paramDate = searchParams.get('date')?.slice(0, 10) || '';
-
-  // The WorldMap-selected/input-file date is authoritative for Surface.
-  // There is intentionally no hard-coded 2023/2024 fallback.
-  const [selectedDate, setSelectedDate] = useState(() => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(paramDate)) return paramDate;
-    const saved = localStorage.getItem('ocean_input_date')?.slice(0, 10) ||
-      localStorage.getItem('ocean_shared_date')?.slice(0, 10) || '';
-    return /^\d{4}-\d{2}-\d{2}$/.test(saved) ? saved : '';
-  });
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
 
   useEffect(() => {
-    const nextDate =
-      paramDate ||
-      localStorage.getItem('ocean_input_date')?.slice(0, 10) ||
-      localStorage.getItem('ocean_shared_date')?.slice(0, 10) ||
-      '';
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
-      setSelectedDate(nextDate);
-      localStorage.setItem('ocean_input_date', nextDate);
-      localStorage.setItem('ocean_shared_date', nextDate);
-    }
-  }, [paramDate]);
+    if (!selectedDate) return;
+    localStorage.setItem('ocean_input_date', selectedDate);
+    localStorage.setItem('ocean_shared_date', selectedDate);
+  }, [selectedDate]);
 
   const [surfaceData, setSurfaceData] =
     useState<SurfaceResponse | null>(null);
@@ -333,13 +319,9 @@ export default function SurfacePage() {
   const abortRef =
     useRef<AbortController | null>(null);
 
-  const paramLat = searchParams.get('lat')
-    ? parseFloat(searchParams.get('lat')!)
-    : null;
+  const paramLat = Number.isFinite(lat) ? Number(lat) : null;
 
-  const paramLon = searchParams.get('lon')
-    ? parseFloat(searchParams.get('lon')!)
-    : null;
+  const paramLon = Number.isFinite(lon) ? Number(lon) : null;
 
   const hasPin =
     Number.isFinite(paramLat) &&
@@ -625,30 +607,9 @@ export default function SurfacePage() {
       100
       : null;
 
-  return (
-    <PageLayout>
-      <PageContainer>
-        <PageHeader
-          category="SATELLITE REMOTE SENSING"
-          badge={
-            loading ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono">
-                <div className="w-2 h-2 border border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                FETCHING SATELLITE MATRIX...
-              </div>
-            ) : surfaceData ? (
-              <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${isSynthesized ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300' : 'bg-green-500/15 border border-green-500/30 text-green-400'} text-[11px] font-mono`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isSynthesized ? 'bg-amber-400' : 'bg-green-400 animate-pulse'}`} />
-                {isSynthesized ? 'PHYSICS-GUIDED TWIN' : 'BACKEND CONNECTED'} · {surfaceData.source}
-              </div>
-            ) : null
-          }
-          icon={<Eye size={18} className="text-cyan-400" />}
-          title="Surface Satellite Observations"
-          subtitle="Real daily satellite observations across North Indian Ocean — Sea Surface Temperature (SST), Salinity (SSS), SLA & wind stress"
-        />
-
-        {/* PIN */}
+  const surfaceBody = (
+    <>
+{/* PIN */}
         {hasPin && (
           <div className="flex items-center gap-3 mb-6 p-4 rounded-2xl glass border border-red-500/30">
             <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center">
@@ -859,21 +820,21 @@ export default function SurfacePage() {
 
               </div>
 
-              {/* AUTHORITATIVE OBSERVATION DATE — inherited from Input → WorldMap → selected grid */}
+              {/* AUTHORITATIVE INPUT DATE — READ ONLY */}
               <div className="px-4 py-3 border-t border-white/8 bg-slate-900/40">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[10px] uppercase tracking-wider text-white/45 font-bold">
+                  <span className="text-[11px] uppercase tracking-wider text-white/45 font-bold">
                     Observation Date
                   </span>
-                  <span className="text-cyan-300 font-bold font-mono text-sm">
+                  <span className="px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 text-xs font-mono font-black">
                     {selectedDate
                       ? format(parseISO(selectedDate), 'MMM d, yyyy')
-                      : 'Waiting for input date'}
+                      : 'Waiting for input date…'}
                   </span>
                 </div>
-                <div className="mt-1.5 text-[9.5px] text-white/35 font-mono">
-                  Date is locked to the selected WorldMap grid/input session.
-                </div>
+                <p className="mt-1.5 text-[10px] text-white/35">
+                  Same date supplied by the uploaded dataset and WorldMap selection.
+                </p>
               </div>
 
             </div>
@@ -1009,13 +970,6 @@ export default function SurfacePage() {
                       <Sparkles size={12} />
                       <span>Reconstruct 3D Profile</span>
                       <ArrowRight size={12} />
-                    </button>
-                    <button
-                      onClick={() => navigate(`/worldmap?date=${encodeURIComponent(clickedPoint.date)}&lat=${encodeURIComponent(clickedPoint.lat)}&lon=${encodeURIComponent(clickedPoint.lon)}`)}
-                      className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <MapPin size={12} />
-                      <span>Back to Selected Grid</span>
                     </button>
                     <button
                       onClick={() => navigate(`/profile-3d?date=${clickedPoint.date}&lat=${clickedPoint.lat}&lon=${clickedPoint.lon}`)}
@@ -1176,7 +1130,48 @@ export default function SurfacePage() {
 
           </div>
         </div>
-      </PageContainer>
-    </PageLayout>
+    </>
+  );
+
+  return (
+    <section className="w-full rounded-3xl bg-[#002f52] border border-cyan-500/25 shadow-2xl overflow-hidden">
+      <div className="px-5 sm:px-8 pt-7 pb-5 border-b border-cyan-300/20 bg-gradient-to-r from-[#003b63] via-[#005088] to-[#0078b8]">
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="px-3 py-1 rounded-full bg-white/90 text-[#005088] text-[10px] font-mono font-black tracking-wider">
+            SATELLITE REMOTE SENSING
+          </span>
+          <span className={`px-3 py-1 rounded-full text-[10px] font-mono font-bold border ${
+            loading
+              ? 'bg-cyan-500/15 border-cyan-300/30 text-cyan-100'
+              : surfaceData
+                ? isSynthesized
+                  ? 'bg-amber-500/15 border-amber-300/30 text-amber-100'
+                  : 'bg-emerald-500/15 border-emerald-300/30 text-emerald-100'
+                : 'bg-white/10 border-white/20 text-white/70'
+          }`}>
+            {loading
+              ? 'FETCHING SATELLITE MATRIX...'
+              : surfaceData
+                ? (isSynthesized ? 'PHYSICS-GUIDED TWIN' : 'BACKEND CONNECTED')
+                : 'WAITING FOR INPUT'}
+          </span>
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+            <Eye size={20} className="text-cyan-200" />
+          </div>
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              Surface Satellite Observations
+            </h2>
+            <p className="text-sm text-cyan-100/90 mt-1 leading-relaxed max-w-4xl">
+              Real daily satellite observations across North Indian Ocean — Sea Surface Temperature (SST), Salinity (SSS), SLA &amp; wind stress
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {surfaceBody}
+    </section>
   );
 }

@@ -40,10 +40,10 @@ const DATASET_START =
   '2018-01-01'
 
 const DATASET_END =
-  '2025-12-31'
+  '2026-09-18'
 
 const DEFAULT_DATE =
-  '2024-06-15'
+  '2026-09-18'
 
 
 
@@ -223,8 +223,7 @@ async function apiFetch<T>(
       !response.ok
     ) {
       throw new Error(
-        `Backend HTTP ${response.status} ${
-          response.statusText
+        `Backend HTTP ${response.status} ${response.statusText
         }: ${bodyText.slice(
           0,
           500,
@@ -282,6 +281,24 @@ export interface ChatResponse {
   reply: string
   source: string
   model: string
+  grounded?: boolean
+  fallback?: boolean
+  groq_error?: string
+}
+
+export interface ChatHistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ChatContext {
+  route?: string
+  page_title?: string
+  selected_date?: string
+  latitude?: number
+  longitude?: number
+  depth_m?: number
+  [key: string]: unknown
 }
 
 // src/api/oceanApi.ts
@@ -547,6 +564,8 @@ export interface EmbeddingCompareResponse {
  */
 export async function sendChat(
   message: string,
+  history: ChatHistoryMessage[] = [],
+  context: ChatContext = {},
 ): Promise<ChatResponse> {
   return apiFetch<ChatResponse>(
     `${getBase()}/chat`,
@@ -554,12 +573,13 @@ export async function sendChat(
       method: 'POST',
 
       headers: {
-        'Content-Type':
-          'application/json',
+        'Content-Type': 'application/json',
       },
 
       body: JSON.stringify({
         message,
+        history,
+        context,
       }),
     },
   )
@@ -575,13 +595,19 @@ export async function sendChat(
  * GET /health
  */
 export async function fetchHealth(): Promise<HealthResponse> {
+  // Pipeline A can be CPU/GPU intensive. Prefer the lightweight liveness
+  // endpoint so the frontend can still determine whether FastAPI is alive.
   try {
-    return await apiFetch<HealthResponse>(`${getBase()}/health`)
-  } catch (err) {
+    return await apiFetch<HealthResponse>(`${getBase()}/health/live`)
+  } catch (liveError) {
     try {
-      return await apiFetch<HealthResponse>(`${getBase()}/api/health`)
-    } catch {
-      throw err
+      return await apiFetch<HealthResponse>(`${getBase()}/health`)
+    } catch (healthError) {
+      try {
+        return await apiFetch<HealthResponse>(`${getBase()}/api/health`)
+      } catch {
+        throw liveError instanceof Error ? liveError : healthError
+      }
     }
   }
 }
@@ -656,6 +682,64 @@ export async function fetchSurface(
 
   return apiFetch<SurfaceResponse>(
     `${getBase()}/api/surface/${safeDate}`,
+  )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OceanEmbed Integrated Cyclone Forecast
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CycloneModelForecastPoint {
+  horizon_h: number
+  latitude: number
+  longitude: number
+  wind: number
+  pressure: number
+}
+
+export interface CycloneModelForecastResponse {
+  status: string
+  model?: {
+    name?: string
+    checkpoint_epoch?: number | null
+    checkpoint_val_loss?: number | null
+  }
+  sample?: {
+    sample_id?: string
+    storm_id?: string
+    issue_date?: string
+    issue_position?: {
+      latitude: number
+      longitude: number
+    }
+  }
+  forecast: CycloneModelForecastPoint[]
+}
+
+/**
+ * POST /api/cyclone/forecast
+ *
+ * Runs the real OceanEmbed Integrated Cyclone V1 model for a
+ * historical issue date. The backend selects the matching training
+ * sample using storm_id + issue_date + split.
+ */
+export async function fetchCycloneForecast(
+  payload: {
+    storm_id: string
+    issue_date: string
+    split?: string
+  },
+): Promise<CycloneModelForecastResponse> {
+  return apiFetch<CycloneModelForecastResponse>(
+    `${getBase()}/api/cyclone/forecast`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
   )
 }
 
@@ -773,14 +857,14 @@ export async function compareEmbeddings(
 ): Promise<EmbeddingCompareResponse> {
   const safeModels =
     request.models &&
-    request.models.length > 0
+      request.models.length > 0
       ? request.models
       : [
-          'cnn',
-          'swin',
-          'gnn',
-          'autoencoder',
-        ]
+        'cnn',
+        'swin',
+        'gnn',
+        'autoencoder',
+      ]
 
   const safeMethod =
     request.method ?? 'pca'
@@ -962,7 +1046,83 @@ export async function fetchCyclonePhase1(
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Cyclone Historical Track
+// ─────────────────────────────────────────────────────────────────────────────
 
+export interface CycloneHistoricalTrackPoint {
+  date: string
+  latitude: number
+  longitude: number
+  observation_time?: string
+  wind?: number
+  pressure?: number
+}
+
+export interface CycloneHistoricalTrackResponse {
+  status: string
+  storm_id: string
+  split: string
+  count: number
+  track: CycloneHistoricalTrackPoint[]
+}
+
+/**
+ * GET /api/cyclone/track/{storm_id}
+ *
+ * Returns the real historical daily track for a cyclone.
+ */
+export async function fetchCycloneHistoricalTrack(
+  stormId: string,
+  split: string = 'test',
+): Promise<CycloneHistoricalTrackResponse> {
+  if (!stormId.trim()) {
+    throw new Error('Storm ID cannot be empty.')
+  }
+
+  return apiFetch<CycloneHistoricalTrackResponse>(
+    `${getBase()}/api/cyclone/track/${encodeURIComponent(stormId)}?split=${encodeURIComponent(split)}`,
+  )
+}
+
+
+export interface HistoricalCycloneCandidate {
+  storm_id: string
+  date: string
+  latitude: number
+  longitude: number
+  split: string
+  observation_time?: string
+  wind?: number
+  pressure?: number
+}
+
+export interface HistoricalCyclonesByDateResponse {
+  status: string
+  date: string
+  count: number
+  cyclones: HistoricalCycloneCandidate[]
+}
+
+/**
+ * GET /api/cyclone/historical/by-date?date=YYYY-MM-DD
+ *
+ * Searches the prepared historical cyclone datasets without requiring
+ * the user to know a storm ID.
+ */
+export async function fetchHistoricalCyclonesByDate(
+  date: string,
+): Promise<HistoricalCyclonesByDateResponse> {
+  const safeDate = date.trim().slice(0, 10)
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(safeDate)) {
+    throw new Error('Historical date must use YYYY-MM-DD format.')
+  }
+
+  return apiFetch<HistoricalCyclonesByDateResponse>(
+    `${getBase()}/api/cyclone/historical/by-date?date=${encodeURIComponent(safeDate)}`,
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared api URL map
@@ -991,6 +1151,126 @@ export const api = {
   healthUrl: () =>
     `${getBase()}/health`,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pipeline A — real raw-file upload / inspection / execution
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PipelineASlot = 'sst' | 'sss' | 'ssh' | 'currents' | 'winds';
+
+export interface PipelineAFileInspection {
+  filename?: string;
+  format?: string;
+  size_bytes?: number;
+  variables?: string[];
+  dimensions?: Record<string, number>;
+  coordinates?: Record<string, unknown>;
+  units?: Record<string, string>;
+  time?: {
+    coordinate?: string;
+    start?: string;
+    end?: string;
+    count?: number;
+  } | null;
+  statistics?: Record<string, {
+    finite_count?: number;
+    missing_or_nonfinite_count?: number;
+    mean?: number | null;
+    min?: number | null;
+    max?: number | null;
+  }>;
+  warnings?: string[];
+  errors?: string[];
+  hdf5_datasets?: Array<{
+    name: string;
+    shape: number[];
+    dtype: string;
+  }>;
+}
+
+export interface PipelineAInspectResponse {
+  success: boolean;
+  job_id: string;
+  target_date?: string | null;
+  files: Record<PipelineASlot, PipelineAFileInspection>;
+  required_slots: PipelineASlot[];
+}
+
+export interface PipelineAUploadResponse {
+  success: boolean;
+  job_id: string;
+  status: string;
+  selected_dates: string[];
+  files: Record<PipelineASlot, PipelineAFileInspection>;
+  pipeline: string;
+  version: string;
+}
+
+export interface PipelineAStatusResponse {
+  success: boolean;
+  job_id: string;
+  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | string;
+  current_stage: string;
+  stage_status: Record<string, string>;
+  selected_dates?: string[];
+  files?: Record<PipelineASlot, PipelineAFileInspection>;
+  started_at?: string;
+  finished_at?: string | null;
+  error?: string | null;
+  log_tail?: string;
+  result?: PipelineARunResponse;
+  [key: string]: unknown;
+}
+
+export async function inspectPipelineAFile(
+  slot: PipelineASlot,
+  file: File,
+  targetDate?: string,
+): Promise<PipelineAInspectResponse> {
+  const form = new FormData();
+  form.append(slot, file, file.name);
+  if (targetDate) form.append('target_date', targetDate);
+
+  return apiFetch<PipelineAInspectResponse>(
+    `${getBase()}/api/pipeline_a/inspect`,
+    {
+      method: 'POST',
+      body: form,
+    },
+  );
+}
+
+export async function uploadPipelineA(
+  files: Partial<Record<PipelineASlot, File>>,
+  targetDate?: string,
+): Promise<PipelineAUploadResponse> {
+  const form = new FormData();
+
+  (Object.entries(files) as [PipelineASlot, File | undefined][]).forEach(
+    ([slot, file]) => {
+      if (file) form.append(slot, file, file.name);
+    },
+  );
+
+  if (targetDate) form.append('target_date', targetDate);
+  form.append('validation_scope', 'fixture');
+
+  return apiFetch<PipelineAUploadResponse>(
+    `${getBase()}/api/pipeline_a/upload`,
+    {
+      method: 'POST',
+      body: form,
+    },
+  );
+}
+
+export async function fetchPipelineAStatus(
+  jobId: string,
+): Promise<PipelineAStatusResponse> {
+  return apiFetch<PipelineAStatusResponse>(
+    `${getBase()}/api/pipeline_a/status/${encodeURIComponent(jobId)}`,
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pipeline A Execution & Specifications
@@ -1045,6 +1325,209 @@ export async function fetchPipelineASpecs(): Promise<Record<string, unknown>> {
   }
 }
 
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Seasonal Ocean Forecasting — production FNO
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SeasonalAssetStatusResponse {
+  success: boolean;
+  available: boolean;
+  checkpoint_exists: boolean;
+  normalization_exists: boolean;
+  climatology_exists: boolean;
+  monthly_dataset_exists: boolean;
+  manifest_exists?: boolean;
+  config_exists?: boolean;
+  training_summary_exists?: boolean;
+  checkpoint?: string;
+  normalization?: string;
+  climatology_root?: string;
+  monthly_dataset_root?: string;
+  device?: string;
+  input_shape?: number[];
+  output_shape?: number[];
+  embedding_dimension?: number;
+  [key: string]: unknown;
+}
+
+export interface SeasonalConfigResponse {
+  success: boolean;
+  model: string;
+  checkpoint: string;
+  input_shape: [number, number, number, number];
+  output_shape: [number, number, number, number];
+  forecast_months: number;
+  channel_count: number;
+  architecture?: Record<string, unknown>;
+  training_period?: string;
+  validation_period?: string;
+  test_period?: string;
+  normalization?: string;
+  reconstruction?: string;
+  [key: string]: unknown;
+}
+
+export interface SeasonalPredictionRequest {
+  input_end_month: string;
+}
+
+export interface SeasonalGrid {
+  lat: number[];
+  lon: number[];
+}
+
+export interface SeasonalNormalization {
+  type?: string;
+  stats_file?: string;
+  sst_train_mean?: number;
+  sst_train_std?: number;
+  [key: string]: unknown;
+}
+
+export interface SeasonalPredictionResponse {
+  success: boolean;
+  model: string;
+  input_end_month: string;
+  input_months: string[];
+  forecast_months: string[];
+  input_shape: [number, number, number, number];
+  output_shape: [number, number, number, number];
+
+  // Backend intentionally does not claim verified physical Celsius output.
+  forecast_sst_C: null | number[][][][];
+  forecast_sst_normalized: number[][][][];
+
+  forecast_anomaly_normalized: number[][][][];
+
+  device: string;
+  checkpoint: string;
+
+  grid: SeasonalGrid;
+
+  normalization?: SeasonalNormalization;
+
+  forecast_units?: string;
+  forecast_sst_C_note?: string;
+  climatology?: {
+    source?: string;
+    root?: string;
+    [key: string]: unknown;
+  };
+
+  [key: string]: unknown;
+}
+
+function normalizeSeasonalMonth(value: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(value ?? '');
+  if (!match) {
+    throw new Error(`Invalid seasonal month "${value}". Expected YYYY-MM.`);
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    throw new Error(`Invalid seasonal month "${value}". Expected YYYY-MM.`);
+  }
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+}
+
+export async function fetchSeasonalStatus(): Promise<SeasonalAssetStatusResponse> {
+  return apiFetch<SeasonalAssetStatusResponse>(
+    `${getBase()}/api/seasonal/status`,
+  );
+}
+
+export async function fetchSeasonalConfig(): Promise<SeasonalConfigResponse> {
+  return apiFetch<SeasonalConfigResponse>(
+    `${getBase()}/api/seasonal/config`,
+  );
+}
+
+export async function fetchSeasonalPrediction(
+  inputEndMonth: string,
+): Promise<SeasonalPredictionResponse> {
+  const safeMonth = normalizeSeasonalMonth(inputEndMonth);
+
+  return apiFetch<SeasonalPredictionResponse>(
+    `${getBase()}/api/seasonal/predict`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input_end_month: safeMonth,
+      } satisfies SeasonalPredictionRequest),
+    },
+  );
+}
+
+export interface OceanDiagnosticMapResponse {
+  success: boolean;
+  date: string;
+  lat: number[];
+  lon: number[];
+  values: number[][];
+  units: string;
+  input_window?: { start: string; end: string; days: number };
+  grid_shape?: [number, number] | number[];
+  diagnostic?: string;
+}
+
+export async function fetchOceanDiagnosticMap(
+  date: string,
+  metric: 'tchp' | 'ohc' | 'd26',
+): Promise<OceanDiagnosticMapResponse> {
+  const safeDate = clampDate(date);
+  const endpoint =
+    metric === 'tchp'
+      ? `/api/diagnostics/tchp-map/${safeDate}`
+      : metric === 'ohc'
+        ? `/api/diagnostics/ohc-map/${safeDate}`
+        : `/api/diagnostics/d26-map/${safeDate}`;
+
+  const raw = await apiFetch<Record<string, unknown>>(`${getBase()}${endpoint}`);
+  const rawValues =
+    metric === 'tchp'
+      ? raw.values_kJ_cm2
+      : metric === 'ohc'
+        ? raw.values_GJ_m2
+        : raw.values_m;
+
+  if (!Array.isArray(raw.lat) || !Array.isArray(raw.lon) || !Array.isArray(rawValues)) {
+    throw new Error('Backend returned an invalid diagnostic map payload.');
+  }
+
+  return {
+    success: raw.success !== false,
+    date: String(raw.date ?? safeDate),
+    lat: raw.lat.map(Number),
+    lon: raw.lon.map(Number),
+    values: (rawValues as unknown[]).map((row) =>
+      Array.isArray(row)
+        ? row.map((value) => (value == null ? Number.NaN : Number(value)))
+        : [],
+    ),
+    units: String(raw.units ?? (metric === 'tchp' ? 'kJ/cm²' : metric === 'ohc' ? 'GJ/m²' : 'm')),
+    input_window:
+      raw.input_window && typeof raw.input_window === 'object'
+        ? (raw.input_window as { start: string; end: string; days: number })
+        : undefined,
+    grid_shape: Array.isArray(raw.grid_shape) ? (raw.grid_shape as number[]) : undefined,
+    diagnostic: typeof raw.diagnostic === 'string' ? raw.diagnostic : undefined,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Ocean Profile & Deep Subsurface Diagnostics
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1067,12 +1550,13 @@ export interface OceanDiagnosticsResponse {
   forecast_date: string;
   requested_location: { latitude: number; longitude: number };
   nearest_grid_location: { latitude: number; longitude: number };
-  surface_temperature_C: number;
+  input_window?: { start: string; end: string; days: number };
+  surface_temperature_C: number | null;
   depths_m: number[];
   temperature_profile_C: (number | null)[];
-  d26?: { d26_depth_m: number; reference_temperature_C: number };
-  ohc_0_700?: { ohc_0_700_GJ_m2: number; formula: string };
-  tchp?: { tchp_kJ_cm2: number; formula: string };
+  d26?: { d26_depth_m: number | null; reference_temperature_C: number };
+  ohc_0_700?: { ohc_0_700_GJ_m2: number | null; formula: string };
+  tchp?: { tchp_kJ_cm2: number | null; formula: string };
 }
 
 export async function fetchOceanProfile(
@@ -1096,3 +1580,38 @@ export async function fetchOceanDiagnostics(
     `${getBase()}/api/ocean/diagnostics/${safeDate}/${latitude}/${longitude}`
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live 5-Category Embeddings API (Folder & Thermocline Stores)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LiveBackendFolderEmbeddingsResponse {
+  success: boolean;
+  source: string;
+  count: number;
+  embedding_dimension: number;
+  categories: string[];
+  models: any[];
+}
+
+export interface LiveBackendThermoclineResponse {
+  success: boolean;
+  source: string;
+  count: number;
+  embedding_dimension: number;
+  categories: string[];
+  models: any[];
+}
+
+export async function fetchLiveFolderEmbeddings(): Promise<LiveBackendFolderEmbeddingsResponse> {
+  return apiFetch<LiveBackendFolderEmbeddingsResponse>(`${getBase()}/api/folder-embeddings/frontend`);
+}
+
+export async function fetchLiveThermoclineEmbeddings(): Promise<LiveBackendThermoclineResponse> {
+  return apiFetch<LiveBackendThermoclineResponse>(`${getBase()}/api/thermocline/embeddings/frontend`);
+}
+
+export async function fetchRawFolderEmbeddingVector(index: number): Promise<{ embedding: number[]; point_2d: [number, number] }> {
+  return apiFetch(`${getBase()}/api/folder-embeddings/embedding/${index}`);
+}
+

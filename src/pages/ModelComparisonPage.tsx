@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import {
@@ -17,7 +17,29 @@ import {
   Sparkles,
   Sliders,
   ArrowRight,
+  Search,
+  Flame,
+  Wind,
+  Thermometer,
+  Folder,
+  FileText,
+  Filter,
+  Calendar,
+  ChevronRight,
+  Info,
+  ExternalLink,
+  Box,
 } from 'lucide-react';
+
+import {
+  CATEGORY_DEFINITIONS,
+  ALL_CATEGORY_META,
+  OCEAN_EMBEDDINGS_DATA,
+  type OceanEmbeddingItem,
+  type OceanEmbeddingCategoryKey,
+  getCategoryEmbeddings,
+  searchOceanEmbeddings,
+} from '../data/oceanFiveCategoryEmbeddings';
 
 import {
   LineChart,
@@ -49,6 +71,9 @@ import {
   fetchMetricsSummary,
   fetchReport,
   compareEmbeddings,
+  fetchLiveFolderEmbeddings,
+  fetchLiveThermoclineEmbeddings,
+  fetchRawFolderEmbeddingVector,
   type EmbeddingCompareResponse,
   type EmbeddingResult,
 } from '../api/oceanApi';
@@ -304,7 +329,13 @@ const KNOWN_EMBEDDING_INFO: Record<string, {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ModelComparisonPage() {
+export interface ModelComparisonPageProps {
+  defaultTab?: ActiveTab;
+}
+
+export default function ModelComparisonPage({
+  defaultTab = 'embedding',
+}: ModelComparisonPageProps = {}) {
   const [
     metrics,
     setMetrics,
@@ -342,7 +373,9 @@ export default function ModelComparisonPage() {
       ? 'depth'
       : tabParam === 'comparison'
       ? 'comparison'
-      : 'overview';
+      : tabParam === 'overview'
+      ? 'overview'
+      : defaultTab;
 
   const [activeTab, setActiveTabState] = useState<ActiveTab>(initialTab);
 
@@ -352,7 +385,7 @@ export default function ModelComparisonPage() {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (tab === 'overview') {
+          if (tab === 'embedding' && defaultTab === 'embedding') {
             next.delete('tab');
           } else {
             next.set('tab', tab);
@@ -362,7 +395,7 @@ export default function ModelComparisonPage() {
         { replace: true },
       );
     },
-    [setSearchParams],
+    [setSearchParams, defaultTab],
   );
 
   useEffect(() => {
@@ -372,10 +405,12 @@ export default function ModelComparisonPage() {
       setActiveTabState('depth');
     } else if (tabParam === 'comparison') {
       setActiveTabState('comparison');
-    } else if (tabParam === 'overview' || !tabParam) {
+    } else if (tabParam === 'overview') {
       setActiveTabState('overview');
+    } else if (!tabParam && defaultTab) {
+      setActiveTabState(defaultTab);
     }
-  }, [tabParam]);
+  }, [tabParam, defaultTab]);
 
   const [
     loading,
@@ -430,6 +465,133 @@ export default function ModelComparisonPage() {
     y: number;
     norm: number;
   } | null>(null);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 5-Category Ocean Embeddings State (Cyclone, Subsurface, Seasonal, MHW, Thermocline)
+  // ───────────────────────────────────────────────────────────────────────────
+  const [selectedDomainCategory, setSelectedDomainCategory] =
+    useState<OceanEmbeddingCategoryKey>('all');
+  const [embeddingSearchQuery, setEmbeddingSearchQuery] = useState<string>('');
+  const [inspectedFolderItem, setInspectedFolderItem] =
+    useState<OceanEmbeddingItem | null>(() => {
+      return (
+        OCEAN_EMBEDDINGS_DATA.find(x => x.categoryKey === 'thermocline') ??
+        OCEAN_EMBEDDINGS_DATA[0]
+      );
+    });
+  const [embeddingViewMode, setEmbeddingViewMode] =
+    useState<'categories' | 'neural'>('categories');
+  const [backendLiveStatus, setBackendLiveStatus] =
+    useState<'checking' | 'live' | 'fallback'>('checking');
+  const [liveBackendCounts, setLiveBackendCounts] = useState<{
+    folderCount: number;
+    thermoclineCount: number;
+  } | null>(null);
+  const [liveRawVector, setLiveRawVector] = useState<number[] | null>(null);
+  const [liveVectorLoading, setLiveVectorLoading] = useState(false);
+
+  const syncLiveBackendEmbeddings = useCallback(async () => {
+    try {
+      setBackendLiveStatus('checking');
+      const [folderRes, thermoRes] = await Promise.all([
+        fetchLiveFolderEmbeddings(),
+        fetchLiveThermoclineEmbeddings(),
+      ]);
+
+      if (folderRes?.success && thermoRes?.success) {
+        setBackendLiveStatus('live');
+        setLiveBackendCounts({
+          folderCount: folderRes.count,
+          thermoclineCount: thermoRes.count,
+        });
+      } else {
+        setBackendLiveStatus('fallback');
+      }
+    } catch (e) {
+      console.warn('[ModelComparisonPage] Backend live embeddings sync fell back to local manifest:', e);
+      setBackendLiveStatus('fallback');
+    }
+  }, []);
+
+  useEffect(() => {
+    syncLiveBackendEmbeddings();
+  }, [syncLiveBackendEmbeddings]);
+
+  useEffect(() => {
+    if (inspectedFolderItem && inspectedFolderItem.categoryKey !== 'thermocline') {
+      let cancelled = false;
+      setLiveVectorLoading(true);
+      fetchRawFolderEmbeddingVector(inspectedFolderItem.embedding_index)
+        .then((res: any) => {
+          if (!cancelled && Array.isArray(res?.embedding)) {
+            setLiveRawVector(res.embedding);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setLiveRawVector(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLiveVectorLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    } else {
+      setLiveRawVector(null);
+    }
+  }, [inspectedFolderItem]);
+
+  const filteredCategoryEmbeddings = useMemo(() => {
+    return searchOceanEmbeddings(embeddingSearchQuery, selectedDomainCategory);
+  }, [embeddingSearchQuery, selectedDomainCategory]);
+
+  const categoryScatterSeries = useMemo(() => {
+    const categories: Array<Exclude<OceanEmbeddingCategoryKey, 'all'>> = [
+      'cyclone',
+      'oceansubsurface',
+      'seasonal',
+      'mhw',
+      'thermocline',
+    ];
+
+    return categories.map(catKey => {
+      const meta = CATEGORY_DEFINITIONS[catKey];
+      const items = filteredCategoryEmbeddings.filter(
+        item => item.categoryKey === catKey,
+      );
+      return {
+        key: catKey,
+        name: meta.label,
+        shortLabel: meta.shortLabel,
+        color: meta.color,
+        count: items.length,
+        items,
+      };
+    });
+  }, [filteredCategoryEmbeddings]);
+
+  const nearestFolderNeighbor = useMemo(() => {
+    if (!inspectedFolderItem) return null;
+    let closestItem: OceanEmbeddingItem | null = null;
+    let minDistance = Infinity;
+
+    for (const item of OCEAN_EMBEDDINGS_DATA) {
+      if (item.id === inspectedFolderItem.id) continue;
+      const dx = item.x - inspectedFolderItem.x;
+      const dy = item.y - inspectedFolderItem.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < minDistance) {
+        minDistance = d;
+        closestItem = item;
+      }
+    }
+
+    if (!closestItem) return null;
+    return {
+      item: closestItem,
+      distance: Number(minDistance.toFixed(4)),
+    };
+  }, [inspectedFolderItem]);
 
   // ───────────────────────────────────────────────────────────────────────────
   // Load real backend data
@@ -1213,38 +1375,33 @@ export default function ModelComparisonPage() {
     <PageLayout>
       <PageContainer>
         <PageHeader
-          category="ARCHITECTURE BENCHMARKS"
+          category="OCEAN AI EMBEDDINGS"
           badge={
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              EMBEDDINGS & BENCHMARKS
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-xs font-mono font-bold">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              466 MODELS · 5 DOMAINS · PRODUCTION BENCHMARKS
             </div>
           }
-          title="Model Architecture Comparison"
-          subtitle="Production multi-modal evaluation: 2D CNN vs Swin Transformer vs ConvGRU vs Graph Neural Network embeddings"
-          icon={
-            <Database
-              size={18}
-              className="text-cyan-400"
-            />
-          }
+          title="Embeddings"
+          subtitle="Explore multi-category neural latent representations (466 models across 5 ocean domains), 2D SVD/PCA/t-SNE/UMAP projections & architecture validation benchmarks."
+          icon={<BrainCircuit size={18} className="text-cyan-400" />}
           actions={
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setActiveTab('embedding')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
                   activeTab === 'embedding'
-                    ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/50 shadow-md shadow-cyan-500/20'
-                    : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    ? 'bg-cyan-500/30 text-white border border-cyan-400 shadow-md shadow-cyan-500/25'
+                    : 'bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-200 border border-cyan-500/40'
                 }`}
               >
-                <BrainCircuit size={14} className="text-cyan-400" />
-                <span>Latent Manifolds</span>
+                <BrainCircuit size={14} className="text-cyan-300" />
+                <span>466 Embeddings</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
               </button>
               <button
                 onClick={loadBackendData}
-                className="btn-glass"
+                className="btn-glass text-white font-medium"
               >
                 <RefreshCw size={13} />
                 Refresh
@@ -1271,11 +1428,11 @@ export default function ModelComparisonPage() {
 
               </div>
 
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-slate-300 font-medium mt-1">
                 {getBackendUrl()}
               </p>
 
-              <p className="text-xs text-white/30 mt-1">
+              <p className="text-xs text-slate-300 mt-1">
                 Metrics and validation reports loaded from production API
               </p>
 
@@ -1285,7 +1442,7 @@ export default function ModelComparisonPage() {
               onClick={
                 loadBackendData
               }
-              className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-sm text-white/60 hover:text-white hover:bg-white/5 transition"
+              className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-white/20 text-sm text-slate-200 hover:text-white hover:bg-white/10 transition font-medium"
             >
               <RefreshCw size={14} />
               Refresh
@@ -1295,6 +1452,50 @@ export default function ModelComparisonPage() {
 
         </div>
 
+        {/* Unified Navigation Tabs */}
+        <div className="flex gap-2 p-1.5 glass rounded-2xl border border-white/15 mb-6 overflow-x-auto w-fit shadow-lg shadow-black/20">
+          <button
+            onClick={() => setActiveTab('embedding')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
+              activeTab === 'embedding'
+                ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-white border border-cyan-400 shadow-md shadow-cyan-500/25 ring-1 ring-cyan-400/30'
+                : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            <BrainCircuit size={16} className={activeTab === 'embedding' ? 'text-cyan-300' : 'text-slate-400'} />
+            <span>Embeddings</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono uppercase tracking-wider bg-cyan-500/25 text-cyan-200 border border-cyan-400/40">
+              466 Models
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('depth')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
+              activeTab === 'depth'
+                ? 'bg-cyan-500/25 text-white border border-cyan-400/60 shadow-md'
+                : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            <Layers size={15} />
+            <span>Depth Metrics</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('comparison')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
+              activeTab === 'comparison'
+                ? 'bg-cyan-500/25 text-white border border-cyan-400/60 shadow-md'
+                : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            <BarChart2 size={15} />
+            <span>Validation vs Final Test</span>
+          </button>
+        </div>
+
+        {activeTab !== 'embedding' && (
+          <>
         {/* Dataset badges */}
 
         <div className="flex flex-wrap gap-3 mb-8">
@@ -1341,7 +1542,7 @@ export default function ModelComparisonPage() {
               Source:{' '}
             </span>
 
-            <span className="text-white/70 font-medium">
+            <span className="text-slate-200 font-semibold">
               Backend reports
             </span>
 
@@ -1357,7 +1558,7 @@ export default function ModelComparisonPage() {
 
             <div>
 
-              <p className="text-xs uppercase tracking-wider text-white/40">
+              <p className="text-xs uppercase tracking-wider text-slate-300 font-semibold">
                 Active Evaluation
               </p>
 
@@ -1447,7 +1648,7 @@ export default function ModelComparisonPage() {
               °C
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs text-slate-300 font-medium mt-1">
               Overall RMSE
             </p>
 
@@ -1486,7 +1687,7 @@ export default function ModelComparisonPage() {
               °C
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs text-slate-300 font-medium mt-1">
               Overall MAE
             </p>
 
@@ -1529,7 +1730,7 @@ export default function ModelComparisonPage() {
               °C
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs text-slate-300 font-medium mt-1">
               Overall Bias
             </p>
 
@@ -1568,7 +1769,7 @@ export default function ModelComparisonPage() {
               )}
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs text-slate-300 font-medium mt-1">
               Correlation
             </p>
 
@@ -1582,7 +1783,7 @@ export default function ModelComparisonPage() {
 
           <div className="glass rounded-xl border border-white/10 p-4">
 
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-slate-300 font-medium">
               Active report
             </p>
 
@@ -1597,7 +1798,7 @@ export default function ModelComparisonPage() {
 
           <div className="glass rounded-xl border border-white/10 p-4">
 
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-slate-300 font-medium">
               Valid samples
             </p>
 
@@ -1611,7 +1812,7 @@ export default function ModelComparisonPage() {
 
           <div className="glass rounded-xl border border-white/10 p-4">
 
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-slate-300 font-medium">
               Depth metrics
             </p>
 
@@ -1625,76 +1826,8 @@ export default function ModelComparisonPage() {
 
         </div>
 
-        {/* Tabs */}
-
-        <div className="flex gap-1 p-1 glass rounded-xl border border-white/10 mb-6 overflow-x-auto w-fit">
-
-          <button
-            onClick={() =>
-              setActiveTab(
-                'overview',
-              )
-            }
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap ${
-              activeTab ===
-              'overview'
-                ? 'bg-cyan-500/15 text-white border border-cyan-500/30'
-                : 'text-white/50 hover:text-white'
-            }`}
-          >
-            <Activity size={14} />
-            Overview
-          </button>
-
-          <button
-            onClick={() =>
-              setActiveTab(
-                'depth',
-              )
-            }
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap ${
-              activeTab === 'depth'
-                ? 'bg-cyan-500/15 text-white border border-cyan-500/30'
-                : 'text-white/50 hover:text-white'
-            }`}
-          >
-            <Layers size={14} />
-            Depth Metrics
-          </button>
-
-          <button
-            onClick={() =>
-              setActiveTab(
-                'comparison',
-              )
-            }
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap ${
-              activeTab ===
-              'comparison'
-                ? 'bg-cyan-500/15 text-white border border-cyan-500/30'
-                : 'text-white/50 hover:text-white'
-            }`}
-          >
-            <BarChart2 size={14} />
-            Validation vs Final Test
-          </button>
-
-          <button
-            onClick={() => setActiveTab('embedding')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-              activeTab === 'embedding'
-                ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-white border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                : 'text-white/60 hover:text-white hover:bg-white/5 border border-transparent'
-            }`}
-          >
-            <BrainCircuit size={15} className="text-cyan-400" />
-            <span>Deep Neural Embeddings</span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 animate-pulse">
-              6-Model Manifold
-            </span>
-          </button>
-
-        </div>
+          </>
+        )}
 
         {/* ─────────────────────────────────────────────────────────────── */}
         {/* OVERVIEW */}
@@ -1703,29 +1836,34 @@ export default function ModelComparisonPage() {
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Latent Space Feature Highlight Callout Banner */}
-            <div className="glass rounded-2xl p-6 border border-cyan-500/30 bg-gradient-to-r from-cyan-950/40 via-slate-900/60 to-blue-950/40 depth-shadow relative overflow-hidden">
+            <div className="rounded-3xl p-6 sm:p-7 border-2 border-cyan-400/60 bg-white text-slate-900 shadow-[0_10px_35px_rgba(6,182,212,0.14),0_4px_20px_rgba(15,23,42,0.06)] relative overflow-hidden">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-cyan-50 text-cyan-900 border border-cyan-300 flex items-center gap-1.5 shadow-xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                       NEW: Multi-Manifold Latent Space
                     </span>
-                    <span className="text-xs text-white/50">6 Architectural Representations</span>
-                  </div>
-                  <h3 className="text-lg font-bold flex items-center gap-2">
-                    <BrainCircuit size={18} className="text-cyan-400" />
-                    <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                      Deep Neural Embedding Explorer & Trajectory Manifolds
+                    <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                      6 Architectural Representations
                     </span>
+                  </div>
+
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-100 border border-cyan-300 flex items-center justify-center text-cyan-700 shrink-0 shadow-xs">
+                      <BrainCircuit size={18} />
+                    </div>
+                    <span>Deep Neural Embedding Explorer &amp; Trajectory Manifolds</span>
                   </h3>
-                  <p className="text-xs text-sky-100/90 font-medium max-w-2xl leading-relaxed">
+
+                  <p className="text-xs sm:text-sm text-slate-700 font-medium max-w-3xl leading-relaxed">
                     Inspect high-dimensional manifold coordinates (PCA, t-SNE, UMAP) across Spatial CNN (48-D), Hierarchical Swin (13-D), Multi-Scale Fused (61-D), ConvGRU (64-D), GNN (16-D), and Autoencoder (32-D) with 7-day temporal flow vectors.
                   </p>
                 </div>
+
                 <button
                   onClick={() => setActiveTab('embedding')}
-                  className="btn-primary-cyan px-5 py-2.5 text-xs font-semibold flex items-center gap-2 whitespace-nowrap shadow-lg shadow-cyan-500/20 self-start md:self-auto group"
+                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-xs font-bold flex items-center gap-2 whitespace-nowrap shadow-md shadow-blue-500/25 self-start md:self-auto group cursor-pointer transition-all hover:scale-105 active:scale-95 shrink-0"
                 >
                   <span>Launch Embedding Explorer</span>
                   <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
@@ -2572,239 +2710,152 @@ export default function ModelComparisonPage() {
         {activeTab === 'embedding' && (
           <div className="space-y-6">
 
-            {/* ── Control Station ── */}
-            <div className="glass-panel p-6 rounded-2xl border border-white/10 depth-shadow">
-              <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-cyan-500/15 border border-cyan-500/30 text-cyan-300">
-                      Multi-Manifold Latent Space
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      POST /api/embeddings/compare
-                    </span>
-                  </div>
 
-                  <h3 className="text-xl font-bold flex items-center gap-2 mt-2">
-                    <BrainCircuit size={20} className="text-cyan-400" />
-                    <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                      Deep Neural Embedding Explorer
-                    </span>
-                  </h3>
-
-                  <p className="text-xs text-sky-100/90 font-medium mt-1 max-w-3xl leading-relaxed">
-                    Interactive high-dimensional manifold projection comparing spatial (CNN 48-D), hierarchical attention (Swin 13-D), fused multi-scale (61-D), recurrent temporal (ConvGRU 64-D), topological mesh (GNN 16-D), and variational density (Autoencoder 32-D) ocean representations.
-                  </p>
-
-                  {/* Input window badge */}
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <span className="text-[11px] font-mono text-cyan-400/80 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
-                      Temporal Window: {embeddingComparison?.input_window?.start ?? '2023-12-25'} → {embeddingComparison?.input_window?.end ?? embeddingDate} (7 Days)
-                    </span>
-                    <span className="text-[11px] font-mono text-white/40 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
-                      Projection: {embeddingMethod.toUpperCase()}
-                    </span>
-                    <span className="text-[11px] font-mono text-white/40 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
-                      Depth Slice: {embeddingDepth}m
-                    </span>
-                  </div>
+            {/* ── 5 Category KPI Highlight Cards ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              {/* Cyclone */}
+              <div
+                onClick={() => setSelectedDomainCategory('cyclone')}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+                  selectedDomainCategory === 'cyclone'
+                    ? 'border-orange-500 bg-orange-50/40 shadow-sm ring-1 ring-orange-500/20'
+                    : 'bg-white text-slate-900 border-slate-200 hover:border-orange-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-orange-100 text-orange-800 border border-orange-200">
+                    CYCLONE
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-600">384-D</span>
                 </div>
-
-                {/* Interactive Controls */}
-                <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 items-stretch sm:items-center">
-                  {/* Date Picker */}
-                  <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
-                    <span className="text-[10px] uppercase font-mono text-white/40">Date:</span>
-                    <input
-                      type="date"
-                      value={embeddingDate}
-                      min="2018-01-01"
-                      max="2025-12-31"
-                      onChange={event => setEmbeddingDate(event.target.value)}
-                      className="bg-transparent text-xs text-white outline-none font-mono cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Method Switcher */}
-                  <div className="flex items-center p-1 bg-white/5 rounded-xl border border-white/10">
-                    {(['pca', 'tsne', 'umap'] as ProjectionMethod[]).map(m => (
-                      <button
-                        key={m}
-                        onClick={() => setEmbeddingMethod(m)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
-                          embeddingMethod === m
-                            ? 'bg-cyan-500 text-slate-950 font-bold shadow-lg shadow-cyan-500/30'
-                            : 'text-white/50 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Trajectory Toggle */}
-                  <button
-                    onClick={() => setShowTrajectory(!showTrajectory)}
-                    className={`btn-glass px-3 py-1.5 text-xs flex items-center gap-1.5 ${
-                      showTrajectory ? 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10' : 'text-white/40'
-                    }`}
-                    title="Toggle temporal progression vectors"
-                  >
-                    <TrendingUp size={13} />
-                    Flow
-                  </button>
-
-                  {/* Query Button */}
-                  <button
-                    onClick={loadEmbeddingComparison}
-                    disabled={embeddingCompareLoading}
-                    className="btn-primary-cyan px-4 py-2 text-xs flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-cyan-500/20"
-                  >
-                    <RefreshCw
-                      size={13}
-                      className={embeddingCompareLoading ? 'animate-spin' : ''}
-                    />
-                    {embeddingCompareLoading ? 'Querying Tensors...' : 'Query Latent Space'}
-                  </button>
+                <div className="mt-2.5">
+                  <span className="text-2xl font-black text-slate-900 font-mono">63</span>
+                  <span className="text-xs text-slate-700 font-bold ml-1">folders</span>
                 </div>
+                <p className="text-[11px] text-slate-700 font-medium mt-1 line-clamp-2">
+                  Track cross-attention v2, ConvGRU, XGBoost favorability & integrated models.
+                </p>
               </div>
 
-              {/* Depth Slices Row */}
-              <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Layers size={14} className="text-cyan-400" />
-                  <span className="text-xs font-semibold text-white">Ocean Depth Slice:</span>
-                  <span className="text-[11px] text-white/40">(Controls thermocline baroclinic stratification)</span>
+              {/* Subsurface */}
+              <div
+                onClick={() => setSelectedDomainCategory('oceansubsurface')}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+                  selectedDomainCategory === 'oceansubsurface'
+                    ? 'border-cyan-500 bg-cyan-50/40 shadow-sm ring-1 ring-cyan-500/20'
+                    : 'bg-white text-slate-900 border-slate-200 hover:border-cyan-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-cyan-100 text-cyan-800 border border-cyan-200">
+                    SUBSURFACE
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-600">384-D</span>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {[
-                    { depth: 0, label: '0m (Surface)', desc: 'Solar/Wind turbulent layer' },
-                    { depth: 30, label: '30m (Mixed Layer)', desc: 'Uniform temperature boundary' },
-                    { depth: 100, label: '100m (Thermocline)', desc: 'Steep vertical thermal gradient' },
-                    { depth: 200, label: '200m (Sub-Surface)', desc: 'Mesoscale baroclinic core' },
-                    { depth: 500, label: '500m (Abyssal)', desc: 'Quiescent deep ocean basin' },
-                  ].map(item => (
-                    <button
-                      key={item.depth}
-                      onClick={() => setEmbeddingDepth(item.depth)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                        embeddingDepth === item.depth
-                          ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border border-cyan-400/50 text-cyan-200 shadow-md shadow-cyan-500/20'
-                          : 'bg-white/5 hover:bg-white/10 border border-white/5 text-white/60'
-                      }`}
-                      title={item.desc}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                <div className="mt-2.5">
+                  <span className="text-2xl font-black text-slate-900 font-mono">47</span>
+                  <span className="text-xs text-slate-700 font-bold ml-1">folders</span>
                 </div>
+                <p className="text-[11px] text-slate-700 font-medium mt-1 line-clamp-2">
+                  CNN (1st–4th), Swin Transformer, Autoencoder & GNN depth thermal fields.
+                </p>
               </div>
 
-              {/* Error banner if any */}
-              {embeddingCompareError && (
-                <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 flex items-start gap-2.5">
-                  <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <p className="font-semibold text-red-300">Live API Request Notice</p>
-                    <p className="text-white/60 mt-0.5">{embeddingCompareError} Using calibrated high-dimensional manifold coordinates seamlessly.</p>
-                  </div>
+              {/* Seasonal */}
+              <div
+                onClick={() => setSelectedDomainCategory('seasonal')}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+                  selectedDomainCategory === 'seasonal'
+                    ? 'border-emerald-500 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/20'
+                    : 'bg-white text-slate-900 border-slate-200 hover:border-emerald-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    SEASONAL
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-600">384-D</span>
                 </div>
-              )}
-            </div>
-
-            {/* ── Interactive Model Visibility Filter Bar ── */}
-            <div className="glass-panel p-4 rounded-2xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Sliders size={14} className="text-cyan-400" />
-                <span className="text-xs font-semibold text-white">Active Representation Filter:</span>
-                <span className="text-[11px] text-white/40">Toggle architectures in projection space</span>
+                <div className="mt-2.5">
+                  <span className="text-2xl font-black text-slate-900 font-mono">307</span>
+                  <span className="text-xs text-slate-700 font-bold ml-1">folders</span>
+                </div>
+                <p className="text-[11px] text-slate-700 font-medium mt-1 line-clamp-2">
+                  Multi-month ocean climate projections, ENSO, IOD & monsoon dynamics.
+                </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  { key: 'cnn', name: 'CNN', dim: '48-D', color: '#06b6d4' },
-                  { key: 'swin', name: 'Swin', dim: '13-D', color: '#8b5cf6' },
-                  { key: 'fused', name: 'Fused', dim: '61-D', color: '#10b981' },
-                  { key: 'convgru', name: 'ConvGRU', dim: '64-D', color: '#f97316' },
-                  { key: 'gnn', name: 'GNN', dim: '16-D', color: '#f43f5e' },
-                  { key: 'autoencoder', name: 'Autoencoder', dim: '32-D', color: '#f59e0b' },
-                ].map(model => {
-                  const isActive = visibleModels[model.key] !== false;
-                  return (
-                    <button
-                      key={model.key}
-                      onClick={() =>
-                        setVisibleModels(prev => ({
-                          ...prev,
-                          [model.key]: !isActive,
-                        }))
-                      }
-                      className={`px-3 py-1.5 rounded-xl text-xs flex items-center gap-2 border transition-all ${
-                        isActive
-                          ? 'bg-white/10 border-white/20 text-white shadow-sm'
-                          : 'bg-white/2 border-white/5 text-white/30 hover:text-white/50 opacity-60'
-                      }`}
-                    >
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: isActive ? model.color : '#555' }}
-                      />
-                      <span className="font-semibold">{model.name}</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-black/40 text-white/70">
-                        {model.dim}
-                      </span>
-                    </button>
-                  );
-                })}
+              {/* MHW */}
+              <div
+                onClick={() => setSelectedDomainCategory('mhw')}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+                  selectedDomainCategory === 'mhw'
+                    ? 'border-rose-500 bg-rose-50/40 shadow-sm ring-1 ring-rose-500/20'
+                    : 'bg-white text-slate-900 border-slate-200 hover:border-rose-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                    MHW (HEATWAVE)
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-600">384-D</span>
+                </div>
+                <div className="mt-2.5">
+                  <span className="text-2xl font-black text-slate-900 font-mono">43</span>
+                  <span className="text-xs text-slate-700 font-bold ml-1">folders</span>
+                </div>
+                <p className="text-[11px] text-slate-700 font-medium mt-1 line-clamp-2">
+                  3D U-Net, FNO & Transformer benchmarks across 7-day forecast lead times.
+                </p>
+              </div>
 
-                <button
-                  onClick={() =>
-                    setVisibleModels({
-                      cnn: true,
-                      swin: true,
-                      fused: true,
-                      convgru: true,
-                      gnn: true,
-                      autoencoder: true,
-                    })
-                  }
-                  className="btn-glass px-2.5 py-1 text-[11px] text-white/50 hover:text-white"
-                >
-                  All
-                </button>
+              {/* Thermocline */}
+              <div
+                onClick={() => setSelectedDomainCategory('thermocline')}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+                  selectedDomainCategory === 'thermocline'
+                    ? 'border-purple-500 bg-purple-50/40 shadow-sm ring-1 ring-purple-500/20'
+                    : 'bg-white text-slate-900 border-slate-200 hover:border-purple-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                    THERMOCLINE
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-600">384-D</span>
+                </div>
+                <div className="mt-2.5">
+                  <span className="text-2xl font-black text-purple-700 font-mono">6</span>
+                  <span className="text-xs text-purple-800 font-bold ml-1">specialists</span>
+                </div>
+                <p className="text-[11px] text-purple-900 font-medium mt-1 line-clamp-2">
+                  Specialist suite with 15 depths, D_TC depth & G_max gradient diagnostics.
+                </p>
               </div>
             </div>
 
-            {/* ── Main Multi-Manifold Projection Scatter Graph ── */}
-            <div className="glass-panel p-6 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 depth-shadow">
+            {/* ── 2D Manifold Projection Scatter Chart ── */}
+            <div className="bg-white text-slate-900 p-6 rounded-3xl border border-slate-200 shadow-md">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-white text-base">
-                      {embeddingMethod === 'pca'
-                        ? 'Principal Component Analysis (PCA Space)'
-                        : embeddingMethod === 'tsne'
-                        ? 't-Distributed Stochastic Neighbor Embedding (t-SNE Space)'
-                        : 'Uniform Manifold Approximation & Projection (UMAP Space)'}
+                    <h3 className="font-bold text-slate-900 text-base">
+                      {selectedDomainCategory === 'all'
+                        ? 'Unified 5-Category Manifold Projection (384-D → 2D SVD)'
+                        : `${CATEGORY_DEFINITIONS[selectedDomainCategory]?.label} Manifold Space`}
                     </h3>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                      Depth: {embeddingDepth}m
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-900 border border-blue-200 font-bold">
+                      {filteredCategoryEmbeddings.length} Active Items
                     </span>
                   </div>
-                  <p className="text-xs text-white/50 mt-0.5">
-                    {embeddingMethod === 'pca'
-                      ? 'Orthogonal linear variance axes capturing dominant spatio-temporal thermal gradients across 7 days.'
-                      : embeddingMethod === 'tsne'
-                      ? 'Nonlinear local neighborhood manifold revealing clustered regimes and stratification boundaries.'
-                      : 'Preserves both local cluster continuity and global geodesic distances between architectures.'}
+                  <p className="text-xs text-slate-600 font-medium mt-0.5">
+                    L2-normalized 384-dimensional feature representations projected onto principal variance axes. Click any node to inspect its file architecture, directory contents, and nearest neighbors.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono text-cyan-400/80">
-                    {embeddingMethod === 'pca' ? 'PC1 (42.8%) vs PC2 (27.4%)' : 'Manifold Dim 1 vs Dim 2'}
+                  <span className="text-xs font-mono font-bold text-cyan-700 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200">
+                    SVD Axis 1 vs Axis 2 (L2 Space)
                   </span>
                 </div>
               </div>
@@ -2813,50 +2864,60 @@ export default function ModelComparisonPage() {
               <div className="w-full h-[450px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <ScatterChart margin={{ top: 20, right: 30, bottom: 25, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.12)" />
                     <XAxis
                       type="number"
                       dataKey="x"
-                      name={embeddingMethod === 'pca' ? 'PC1' : 'Dimension 1'}
-                      tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                      name="Manifold Dim 1"
+                      tick={{ fill: '#0f172a', fontSize: 11, fontWeight: 700 }}
+                      axisLine={{ stroke: '#64748b', strokeWidth: 1.5 }}
                       tickLine={false}
-                      domain={['auto', 'auto']}
+                      domain={['dataMin - 0.05', 'dataMax + 0.05']}
                     />
                     <YAxis
                       type="number"
                       dataKey="y"
-                      name={embeddingMethod === 'pca' ? 'PC2' : 'Dimension 2'}
-                      tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                      name="Manifold Dim 2"
+                      tick={{ fill: '#0f172a', fontSize: 11, fontWeight: 700 }}
+                      axisLine={{ stroke: '#64748b', strokeWidth: 1.5 }}
                       tickLine={false}
-                      domain={['auto', 'auto']}
+                      domain={['dataMin - 0.05', 'dataMax + 0.05']}
                     />
-                    <ZAxis type="number" dataKey="index" range={[60, 160]} />
+                    <ZAxis type="number" range={[60, 180]} />
                     <Tooltip
-                      cursor={{ strokeDasharray: '3 3', stroke: 'rgba(6, 182, 212, 0.4)' }}
+                      cursor={{ strokeDasharray: '3 3', stroke: 'rgba(59, 130, 246, 0.4)' }}
                       content={({ active, payload }) => {
                         if (!active || !payload || payload.length === 0) return null;
-                        const pt = payload[0]?.payload;
+                        const pt = payload[0]?.payload as OceanEmbeddingItem;
                         if (!pt) return null;
                         return (
-                          <div className="glass-panel p-3 rounded-xl border border-cyan-500/30 shadow-2xl text-xs space-y-1 bg-slate-950/90 backdrop-blur-md">
-                            <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-1.5">
-                              <span className="font-bold text-white uppercase">{pt.model}</span>
-                              <span className="text-[10px] font-mono text-cyan-400">{pt.date}</span>
+                          <div className="p-3.5 rounded-2xl border border-slate-300 shadow-2xl text-xs space-y-1 bg-white text-slate-900 max-w-xs">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-1.5">
+                              <span className="font-bold text-slate-900 truncate">{pt.name}</span>
+                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                                {pt.categoryLabel}
+                              </span>
                             </div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] pt-1 font-mono">
-                              <span className="text-white/50">{embeddingMethod === 'pca' ? 'PC1' : 'Dim 1'}:</span>
-                              <span className="text-cyan-300 text-right">{Number(pt.x).toFixed(4)}</span>
-                              <span className="text-white/50">{embeddingMethod === 'pca' ? 'PC2' : 'Dim 2'}:</span>
-                              <span className="text-purple-300 text-right">{Number(pt.y).toFixed(4)}</span>
-                              <span className="text-white/50">Latent Norm:</span>
-                              <span className="text-emerald-300 text-right">{Number(pt.norm ?? 0).toFixed(3)}</span>
-                              <span className="text-white/50">Temporal Step:</span>
-                              <span className="text-white/70 text-right">Step {pt.index} / 7</span>
+                            <p className="text-[11px] font-mono text-slate-700 font-semibold truncate pt-0.5">
+                              {pt.relative_path || pt.folder_name}
+                            </p>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] pt-1 font-mono">
+                              <span className="text-slate-700 font-bold">Vector X:</span>
+                              <span className="text-cyan-700 font-bold text-right">{pt.x}</span>
+                              <span className="text-slate-700 font-bold">Vector Y:</span>
+                              <span className="text-purple-700 font-bold text-right">{pt.y}</span>
+                              <span className="text-slate-700 font-bold">Files:</span>
+                              <span className="text-emerald-700 font-bold text-right">{pt.file_count}</span>
+                              <span className="text-slate-700 font-bold">Dimensions:</span>
+                              <span className="text-slate-800 font-bold text-right">{pt.embedding_dim}-D</span>
                             </div>
-                            <p className="text-[10px] text-white/30 pt-1 border-t border-white/5">
-                              Click point to pin in Inspector
+                            {pt.architecture && (
+                              <p className="text-[10px] text-purple-700 pt-1 border-t border-slate-100 font-medium">
+                                Arch: {pt.architecture}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-blue-600 pt-1 border-t border-slate-100 font-bold">
+                              Click node to pin in Inspector
                             </p>
                           </div>
                         );
@@ -2864,53 +2925,36 @@ export default function ModelComparisonPage() {
                     />
                     <Legend
                       wrapperStyle={{ paddingTop: 10 }}
-                      formatter={(value) => <span className="text-xs text-white/70 font-semibold">{value}</span>}
+                      formatter={value => <span className="text-xs text-slate-900 font-black">{value}</span>}
                     />
-                    {embeddingScatterData.map(series => {
-                      const mKey = series.model.toLowerCase();
-                      const color =
-                        mKey === 'cnn'
-                          ? '#06b6d4'
-                          : mKey === 'swin'
-                          ? '#8b5cf6'
-                          : mKey === 'fused'
-                          ? '#10b981'
-                          : mKey === 'convgru'
-                          ? '#f97316'
-                          : mKey === 'gnn'
-                          ? '#f43f5e'
-                          : '#f59e0b';
 
+                    {categoryScatterSeries.map(series => {
+                      if (series.items.length === 0) return null;
                       return (
                         <Scatter
-                          key={series.model}
-                          name={`${series.model.toUpperCase()} (${KNOWN_EMBEDDING_INFO[mKey]?.dimension ?? ''}D)`}
-                          data={series.points}
-                          fill={color}
-                          line={showTrajectory ? { stroke: color, strokeWidth: 1.5, strokeDasharray: '4 4' } : false}
+                          key={series.key}
+                          name={`${series.shortLabel} (${series.count})`}
+                          data={series.items}
+                          fill={series.color}
                           onClick={(pt: any) => {
                             const data = pt?.payload ?? pt;
-                            if (data && typeof data.x === 'number') {
-                              setInspectedPoint({
-                                model: data.model ?? series.model,
-                                date: data.date ?? '',
-                                index: data.index ?? 1,
-                                x: data.x,
-                                y: data.y,
-                                norm: data.norm ?? 0,
-                              });
+                            if (data) {
+                              setInspectedFolderItem(data as OceanEmbeddingItem);
                             }
                           }}
                         >
-                          {series.points.map((_, pIdx) => (
-                            <Cell
-                              key={`cell-${pIdx}`}
-                              fill={color}
-                              stroke="rgba(255,255,255,0.7)"
-                              strokeWidth={pIdx === series.points.length - 1 ? 2 : 0.5}
-                              cursor="pointer"
-                            />
-                          ))}
+                          {series.items.map((item, pIdx) => {
+                            const isPinned = inspectedFolderItem?.id === item.id;
+                            return (
+                              <Cell
+                                key={`cell-${pIdx}`}
+                                fill={series.color}
+                                stroke={isPinned ? '#1e293b' : 'rgba(0,0,0,0.15)'}
+                                strokeWidth={isPinned ? 3 : 0.75}
+                                cursor="pointer"
+                              />
+                            );
+                          })}
                         </Scatter>
                       );
                     })}
@@ -2918,441 +2962,506 @@ export default function ModelComparisonPage() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Inspected Point HUD Banner */}
-              <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center shrink-0">
-                    <Target size={20} className="text-cyan-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">
-                        {inspectedPoint ? `${inspectedPoint.model.toUpperCase()} Vector Sample` : 'Active Temporal Vector Focus'}
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300">
-                        {inspectedPoint ? inspectedPoint.date : embeddingDate}
-                      </span>
-                      {nearestNeighbor && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          Nearest: {nearestNeighbor.model.toUpperCase()} (Δ {nearestNeighbor.distance})
-                        </span>
+              {/* Inspected Embedding HUD Card */}
+              {inspectedFolderItem && (
+                <div className="mt-4 p-5 rounded-2xl bg-gradient-to-r from-slate-50 via-blue-50/25 to-purple-50/35 border border-slate-300 text-slate-900 shadow-sm">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex items-start sm:items-center gap-3.5">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs text-white"
+                        style={{
+                          backgroundColor:
+                            CATEGORY_DEFINITIONS[inspectedFolderItem.categoryKey]?.color ?? '#3b82f6',
+                        }}
+                      >
+                        {inspectedFolderItem.categoryKey === 'thermocline' ? (
+                          <Thermometer size={22} />
+                        ) : inspectedFolderItem.categoryKey === 'cyclone' ? (
+                          <Wind size={22} />
+                        ) : inspectedFolderItem.categoryKey === 'mhw' ? (
+                          <Flame size={22} />
+                        ) : inspectedFolderItem.categoryKey === 'seasonal' ? (
+                          <Calendar size={22} />
+                        ) : (
+                          <Layers size={22} />
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-black text-slate-900">
+                            {inspectedFolderItem.name}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-slate-800 border border-slate-200 shadow-xs">
+                            {inspectedFolderItem.categoryLabel}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-100 text-blue-900 border border-blue-200">
+                            Index: #{inspectedFolderItem.embedding_index}
+                          </span>
+                          {nearestFolderNeighbor && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 text-emerald-900 border border-emerald-200">
+                              Nearest: {nearestFolderNeighbor.item.name} (Δ {nearestFolderNeighbor.distance})
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-800 font-mono mt-1">
+                          Path: <span className="font-bold text-slate-800">{inspectedFolderItem.relative_path || inspectedFolderItem.folder_name}</span>
+                        </p>
+
+                        {inspectedFolderItem.nature_text && (
+                          <p className="text-xs text-slate-800 font-medium mt-1.5 max-w-3xl leading-relaxed">
+                            {inspectedFolderItem.nature_text}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Coordinates & Norm pill */}
+                    <div className="flex flex-wrap items-center gap-2.5 text-xs font-mono shrink-0">
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+                        <span className="text-slate-700 font-bold">X: </span>
+                        <span className="text-cyan-700 font-bold">{inspectedFolderItem.x}</span>
+                      </div>
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+                        <span className="text-slate-700 font-bold">Y: </span>
+                        <span className="text-purple-700 font-bold">{inspectedFolderItem.y}</span>
+                      </div>
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+                        <span className="text-slate-700 font-bold">Norm: </span>
+                        <span className="text-emerald-700 font-bold">{inspectedFolderItem.norm}</span>
+                      </div>
+                      <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+                        <span className="text-slate-700 font-bold">Files: </span>
+                        <span className="text-slate-900 font-bold">{inspectedFolderItem.file_count}</span>
+                      </div>
+                      {liveRawVector && (
+                        <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-300 shadow-xs flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-emerald-900 font-bold">FastAPI 384-D Stream Active</span>
+                        </div>
+                      )}
+                      {liveVectorLoading && (
+                        <div className="bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200 shadow-xs flex items-center gap-1.5">
+                          <Loader2 size={11} className="animate-spin text-blue-600" />
+                          <span className="text-blue-900 font-medium">Streaming Vector...</span>
+                        </div>
                       )}
                     </div>
-                    <p className="text-[11px] text-white/50 mt-0.5">
-                      {inspectedPoint
-                        ? `Pinned: ${embeddingMethod.toUpperCase()} Coordinates (${inspectedPoint.x}, ${inspectedPoint.y}) with L2 Norm = ${inspectedPoint.norm}${
-                            nearestNeighbor ? ` • Closest architectural neighbor is ${nearestNeighbor.model.toUpperCase()} (Euclidean distance: ${nearestNeighbor.distance})` : ''
-                          }`
-                        : 'Click on any scatter point above to pin its coordinate vectors, Euclidean distance, and nearest architectural neighbors.'}
-                    </p>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-4 text-xs font-mono">
-                  <div className="bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
-                    <span className="text-white/40">{embeddingMethod === 'pca' ? 'PC1' : 'Dim 1'}: </span>
-                    <span className="text-cyan-400 font-bold">{inspectedPoint ? inspectedPoint.x : '—'}</span>
-                  </div>
-                  <div className="bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
-                    <span className="text-white/40">{embeddingMethod === 'pca' ? 'PC2' : 'Dim 2'}: </span>
-                    <span className="text-purple-400 font-bold">{inspectedPoint ? inspectedPoint.y : '—'}</span>
-                  </div>
-                  {inspectedPoint && (
-                    <button
-                      onClick={() => setInspectedPoint(null)}
-                      className="text-[11px] text-white/40 hover:text-white underline ml-1"
-                    >
-                      Clear
-                    </button>
+                  {/* Sample Files Pill List */}
+                  {inspectedFolderItem.files && inspectedFolderItem.files.length > 0 && (
+                    <div className="mt-4 pt-3.5 border-t border-slate-200/70 flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-[10px] font-mono uppercase font-bold text-slate-700 mr-1 flex items-center gap-1">
+                        <Folder size={12} />
+                        Descendants ({inspectedFolderItem.file_count}):
+                      </span>
+                      {inspectedFolderItem.files.map((file, fIdx) => (
+                        <span
+                          key={fIdx}
+                          className="px-2 py-0.5 rounded-lg bg-white border border-slate-300 text-[11px] font-mono text-slate-900 font-semibold shadow-2xs"
+                        >
+                          {file}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* ── Model Architecture Summary Cards ── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {displayEmbeddingResults.map(result => {
-                const mKey = result.model.toLowerCase();
-                const isSelected = selectedEmbeddingModel.toLowerCase() === mKey;
-                const known = KNOWN_EMBEDDING_INFO[mKey] ?? { dimension: 48, source: 'Backend representation' };
-                const color =
-                  mKey === 'cnn'
-                    ? '#06b6d4'
-                    : mKey === 'swin'
-                    ? '#8b5cf6'
-                    : mKey === 'fused'
-                    ? '#10b981'
-                    : mKey === 'convgru'
-                    ? '#f97316'
-                    : mKey === 'gnn'
-                    ? '#f43f5e'
-                    : '#f59e0b';
-
-                return (
-                  <div
-                    key={result.model}
-                    onClick={() => setSelectedEmbeddingModel(mKey)}
-                    className={`glass-panel p-5 rounded-2xl border transition-all cursor-pointer depth-shadow relative overflow-hidden group ${
-                      isSelected
-                        ? 'border-cyan-500/50 bg-cyan-950/20 shadow-lg shadow-cyan-500/10'
-                        : 'border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <div
-                      className="absolute top-0 left-0 w-1.5 h-full transition-all"
-                      style={{ backgroundColor: color }}
-                    />
-
-                    <div className="flex items-center justify-between gap-2 pl-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: color }}
-                        />
-                        <h4 className="font-bold text-white text-base">{result.model.toUpperCase()}</h4>
-                      </div>
-
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[9px] font-mono border ${
-                          result.status === 'available'
-                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                            : 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20'
-                        }`}
-                      >
-                        {(result.status ?? 'ACTIVE').toUpperCase()}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mt-4 pl-2">
-                      <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
-                        <span className="text-[10px] text-white/40 uppercase font-mono block">Dimension</span>
-                        <span className="text-xl font-black text-cyan-400 font-mono">
-                          {result.embedding_dimension ?? known.dimension}
-                          <span className="text-xs text-white/30 font-normal ml-0.5">D</span>
-                        </span>
-                      </div>
-
-                      <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
-                        <span className="text-[10px] text-white/40 uppercase font-mono block">Shape</span>
-                        <span className="text-xs font-mono text-white/80 font-semibold block mt-1 truncate">
-                          {result.embedding_shape ? `[${result.embedding_shape.join(', ')}]` : `[7, ${known.dimension}]`}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-[11px] text-white/50 mt-3 pl-2 leading-relaxed">
-                      {known.source}
-                    </p>
-
-                    <div className="mt-4 pt-3 border-t border-white/5 pl-2 flex items-center justify-between text-xs">
-                      <span className="text-[10px] text-white/40 font-mono">Samples: {result.samples ?? 7}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedEmbeddingModel(mKey);
-                        }}
-                        className={`text-[11px] font-semibold flex items-center gap-1 transition-colors ${
-                          isSelected ? 'text-cyan-400' : 'text-white/40 group-hover:text-cyan-300'
-                        }`}
-                      >
-                        Inspect Spectrum <ArrowRight size={12} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* ── Latent Channel Activation Spectrum ── */}
-            <div className="glass-panel p-6 rounded-2xl border border-white/10 depth-shadow">
+            {/* ── Thermocline Specialist Suite Deep-Dive ── */}
+            <div className="bg-white text-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-md">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-cyan-400" />
-                    <h3 className="font-bold text-white text-base">
-                      Latent Channel Activation Spectrum — {selectedEmbeddingModel.toUpperCase()}
-                    </h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-purple-50 text-purple-900 border border-purple-200">
+                      Thermocline Folder Embedding Package
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold bg-cyan-50 text-cyan-900 border border-cyan-200">
+                      backend/Thermocline_Nature_Embeddings
+                    </span>
                   </div>
-                  <p className="text-xs text-white/50 mt-0.5">
-                    Feature channel activation distribution across the {selectedModelChannels.dimension}-dimensional latent representation at {embeddingDepth}m depth.
+
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                    <Thermometer size={22} className="text-purple-600" />
+                    Thermocline Specialist Architecture Suite
+                  </h3>
+
+                  <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1.5 max-w-3xl leading-relaxed">
+                    Specialized subsurface thermal reconstruction for steep gradient thermocline zones.
+                    Consumes 7-day multi-modal surface history across 7 variables to predict full 15-depth profiles
+                    plus thermocline depth D_TC and peak temperature gradient magnitude G_max.
                   </p>
                 </div>
 
-                {/* Model switcher pills */}
-                <div className="flex flex-wrap items-center gap-1.5 p-1 bg-white/5 rounded-xl border border-white/10">
-                  {['cnn', 'swin', 'fused', 'convgru', 'gnn', 'autoencoder'].map(m => (
-                    <button
-                      key={m}
-                      onClick={() => setSelectedEmbeddingModel(m)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
-                        selectedEmbeddingModel.toLowerCase() === m
-                          ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                          : 'text-white/50 hover:text-white'
+                {/* Quick specs pill */}
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                  <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 font-medium">Depths: </span>
+                    <span className="font-bold text-slate-800">15 Levels (0-1000m)</span>
+                  </div>
+                  <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 font-medium">Inputs: </span>
+                    <span className="font-bold text-slate-800">7 Surface Vars</span>
+                  </div>
+                  <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span className="text-slate-500 font-medium">Diagnostics: </span>
+                    <span className="font-bold text-purple-700">D_TC, G_max</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6 Specialist Models Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {OCEAN_EMBEDDINGS_DATA.filter(item => item.categoryKey === 'thermocline').map(model => {
+                  const isSelected = inspectedFolderItem?.id === model.id;
+                  return (
+                    <div
+                      key={model.id}
+                      onClick={() => setInspectedFolderItem(model)}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-purple-50/70 border-purple-500 ring-2 ring-purple-400/40 shadow-sm'
+                          : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 hover:border-purple-300'
                       }`}
                     >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-purple-500" />
+                          {model.name}
+                        </h4>
+                        <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded border border-purple-200">
+                          {model.architecture?.split(' ')[0] ?? 'Specialist'}
+                        </span>
+                      </div>
 
-              {/* KPI Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                <div className="bg-white/5 p-3.5 rounded-xl border border-white/10">
-                  <span className="text-[10px] text-white/40 uppercase font-mono block">Latent Dimension</span>
-                  <span className="text-2xl font-black text-cyan-400 font-mono mt-0.5 block">
-                    {selectedModelChannels.dimension}
-                  </span>
-                  <span className="text-[10px] text-white/30 mt-0.5 block">Feature tensor channels</span>
-                </div>
+                      <p className="text-[11px] text-slate-600 font-medium mt-2 line-clamp-2 leading-relaxed">
+                        {model.nature_text}
+                      </p>
 
-                <div className="bg-white/5 p-3.5 rounded-xl border border-white/10">
-                  <span className="text-[10px] text-white/40 uppercase font-mono block">Active Channels</span>
-                  <span className="text-2xl font-black text-emerald-400 font-mono mt-0.5 block">
-                    {selectedModelChannels.activeCount}
-                    <span className="text-xs font-normal text-white/40 ml-1">/ {selectedModelChannels.dimension}</span>
-                  </span>
-                  <span className="text-[10px] text-white/30 mt-0.5 block">Activation &gt; 0.25 threshold</span>
-                </div>
+                      <div className="grid grid-cols-2 gap-2 mt-3 text-[11px] font-mono">
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <span className="text-slate-500 text-[10px] font-bold block uppercase tracking-wider">Role</span>
+                          <span className="text-slate-900 truncate block font-bold mt-0.5">{model.role?.split(' ')[0] ?? 'Model'}</span>
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <span className="text-slate-500 text-[10px] font-bold block uppercase tracking-wider">Coordinates</span>
+                          <span className="text-cyan-700 font-bold block mt-0.5">({model.x}, {model.y})</span>
+                        </div>
+                      </div>
 
-                <div className="bg-white/5 p-3.5 rounded-xl border border-white/10">
-                  <span className="text-[10px] text-white/40 uppercase font-mono block">Mean Channel Energy</span>
-                  <span className="text-2xl font-black text-purple-400 font-mono mt-0.5 block">
-                    {selectedModelChannels.meanEnergy}
-                  </span>
-                  <span className="text-[10px] text-white/30 mt-0.5 block">Average L1 magnitude</span>
-                </div>
-
-                <div className="bg-white/5 p-3.5 rounded-xl border border-white/10">
-                  <span className="text-[10px] text-white/40 uppercase font-mono block">Channel Sparsity</span>
-                  <span className="text-2xl font-black text-amber-400 font-mono mt-0.5 block">
-                    {selectedModelChannels.sparsity}%
-                  </span>
-                  <span className="text-[10px] text-white/30 mt-0.5 block">L1/L2 concentration</span>
-                </div>
-              </div>
-
-              {/* Bar Spectrum Chart */}
-              <div className="w-full h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={selectedModelChannels.channels} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                    <XAxis
-                      dataKey="channel"
-                      tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9 }}
-                      interval={selectedModelChannels.dimension > 32 ? 3 : 0}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload || payload.length === 0) return null;
-                        const data = payload[0]?.payload;
-                        return (
-                          <div className="glass-panel p-3 rounded-xl border border-cyan-500/30 text-xs shadow-2xl bg-slate-950/90 backdrop-blur-md">
-                            <p className="font-bold text-white">{data.channel}: {data.label}</p>
-                            <p className="text-cyan-400 font-mono mt-1">Activation Energy: {data.energy}</p>
-                            <p className="text-[10px] text-white/40 mt-0.5">Physical Layer: {embeddingDepth}m depth modulation</p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar
-                      dataKey="energy"
-                      name="Activation Energy"
-                      radius={[4, 4, 0, 0]}
-                    >
-                      {selectedModelChannels.channels.map((_, index) => {
-                        const mKey = selectedEmbeddingModel.toLowerCase();
-                        const color =
-                          mKey === 'cnn'
-                            ? index < 16 ? '#06b6d4' : index < 32 ? '#38bdf8' : '#818cf8'
-                            : mKey === 'swin'
-                            ? '#8b5cf6'
-                            : mKey === 'fused'
-                            ? index < 48 ? '#10b981' : '#06b6d4'
-                            : mKey === 'convgru'
-                            ? '#f97316'
-                            : mKey === 'gnn'
-                            ? '#f43f5e'
-                            : '#f59e0b';
-
-                        return <Cell key={`cell-${index}`} fill={color} opacity={0.85} />;
-                      })}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                      <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-mono font-medium">384-D Vector</span>
+                        <span className="text-purple-700 font-bold flex items-center gap-1 hover:text-purple-900 transition-colors">
+                          Inspect Model <ChevronRight size={12} />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* ── Cross-Model Latent Cosine Similarity Matrix ── */}
-            <div className="glass-panel p-6 rounded-2xl border border-white/10 depth-shadow">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            {/* ── Searchable 5-Category Inventory Directory Table ── */}
+            <div className="bg-white text-slate-900 rounded-3xl border border-slate-200 overflow-hidden shadow-md">
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-white text-base flex items-center gap-2">
-                    <Activity size={16} className="text-cyan-400" />
-                    Cross-Architecture Latent Cosine Similarity Matrix
+                  <h3 className="font-bold text-slate-900 text-base">
+                    All Embedded Items Directory ({filteredCategoryEmbeddings.length})
                   </h3>
-                  <p className="text-xs text-white/40 mt-0.5">
-                    Pairwise cosine similarity S_C(u, v) = (u · v) / (||u|| ||v||) revealing semantic alignment across latent representation spaces.
+                  <p className="text-xs text-slate-600 font-medium mt-0.5">
+                    Catalogued modules across Cyclone, Subsurface, Seasonal, MHW, and Thermocline.
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-blue-900" /> &lt; 0.60</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-cyan-700" /> 0.70</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-600" /> &gt; 0.85</span>
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-700 font-bold">
+                  <span>Filtered: {filteredCategoryEmbeddings.length}</span>
+                  <span>•</span>
+                  <span>Total: 466</span>
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-96 overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="px-4 py-3 text-left font-mono text-white/40 uppercase">Architecture</th>
-                      {cosineSimilarityData.models.map(m => (
-                        <th key={m} className="px-3 py-3 text-center font-mono text-white/70 uppercase">
+                  <thead className="sticky top-0 bg-slate-100 z-10 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-mono font-black text-slate-900 uppercase">Domain</th>
+                      <th className="px-4 py-3 text-left font-mono font-black text-slate-900 uppercase">Folder / Name</th>
+                      <th className="px-4 py-3 text-left font-mono font-black text-slate-900 uppercase">Path</th>
+                      <th className="px-3 py-3 text-center font-mono font-black text-slate-900 uppercase">Files</th>
+                      <th className="px-3 py-3 text-center font-mono font-black text-slate-900 uppercase">Coords (X, Y)</th>
+                      <th className="px-3 py-3 text-center font-mono font-black text-slate-900 uppercase">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCategoryEmbeddings.slice(0, 100).map(item => {
+                      const isPinned = inspectedFolderItem?.id === item.id;
+                      const color =
+                        item.categoryKey === 'cyclone'
+                          ? '#f97316'
+                          : item.categoryKey === 'oceansubsurface'
+                          ? '#06b6d4'
+                          : item.categoryKey === 'seasonal'
+                          ? '#10b981'
+                          : item.categoryKey === 'mhw'
+                          ? '#f43f5e'
+                          : '#8b5cf6';
+
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => setInspectedFolderItem(item)}
+                          className={`border-b border-slate-100 transition-colors cursor-pointer ${
+                            isPinned ? 'bg-blue-50/70 font-semibold' : 'hover:bg-slate-50/70'
+                          }`}
+                        >
+                          <td className="px-4 py-2.5">
+                            <span
+                              className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold inline-flex items-center gap-1.5"
+                              style={{
+                                backgroundColor: `${color}15`,
+                                color,
+                                border: `1px solid ${color}30`,
+                              }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                              {item.categoryKey.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 font-bold text-slate-900 font-mono">
+                            {item.name}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-slate-700 font-semibold text-[11px] truncate max-w-xs">
+                            {item.relative_path || item.folder_name}
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono text-slate-900 font-black">
+                            {item.file_count}
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono text-cyan-700 font-bold text-[11px]">
+                            ({item.x}, {item.y})
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setInspectedFolderItem(item);
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-200 hover:bg-blue-600 hover:text-white text-slate-900 transition-all font-mono border border-slate-300"
+                            >
+                              Inspect
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredCategoryEmbeddings.length > 100 && (
+                <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 text-center text-xs text-slate-700 font-bold">
+                  Showing top 100 of {filteredCategoryEmbeddings.length} items. Use the search input above to filter specifically.
+                </div>
+              )}
+            </div>
+
+            {/* ── Optional Deep Neural Latent Spectrum (Available or Toggled) ── */}
+            {embeddingViewMode === 'neural' && (
+              <div className="space-y-6 pt-4 border-t border-slate-200">
+                <div className="bg-white text-slate-900 p-6 rounded-3xl border border-slate-200 shadow-md">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={16} className="text-cyan-700" />
+                        <h3 className="font-bold text-slate-900 text-base">
+                          Latent Channel Activation Spectrum — {selectedEmbeddingModel.toUpperCase()}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-600 font-medium mt-0.5">
+                        Feature channel activation distribution across the {selectedModelChannels.dimension}-dimensional latent representation at {embeddingDepth}m depth.
+                      </p>
+                    </div>
+
+                    {/* Model switcher pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                      {['cnn', 'swin', 'fused', 'convgru', 'gnn', 'autoencoder'].map(m => (
+                        <button
+                          key={m}
+                          onClick={() => setSelectedEmbeddingModel(m)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            selectedEmbeddingModel.toLowerCase() === m
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
                           {m}
-                        </th>
+                        </button>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cosineSimilarityData.models.map(rowModel => (
-                      <tr key={rowModel} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-white uppercase font-mono">
-                          {rowModel}
-                        </td>
-                        {cosineSimilarityData.models.map(colModel => {
-                          const val = cosineSimilarityData.matrix[rowModel]?.[colModel] ?? 0;
-                          const isDiagonal = rowModel === colModel;
-                          const bgIntensity =
-                            isDiagonal
-                              ? 'bg-cyan-500/20 text-cyan-300 font-bold'
-                              : val >= 0.85
-                              ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
-                              : val >= 0.70
-                              ? 'bg-cyan-600/15 text-cyan-200'
-                              : val >= 0.60
-                              ? 'bg-blue-600/10 text-blue-300'
-                              : 'bg-white/2 text-white/40';
+                    </div>
+                  </div>
 
-                          return (
-                            <td key={colModel} className="px-3 py-2.5 text-center">
-                              <span className={`px-2.5 py-1 rounded-lg font-mono text-[11px] inline-block ${bgIntensity}`}>
-                                {val.toFixed(3)}
-                              </span>
+                  {/* KPI Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-700 uppercase font-mono font-bold block">Latent Dimension</span>
+                      <span className="text-2xl font-black text-cyan-700 font-mono mt-0.5 block">
+                        {selectedModelChannels.dimension}
+                      </span>
+                      <span className="text-[10px] text-slate-600 font-medium mt-0.5 block">Feature tensor channels</span>
+                    </div>
+
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-700 uppercase font-mono font-bold block">Active Channels</span>
+                      <span className="text-2xl font-black text-emerald-700 font-mono mt-0.5 block">
+                        {selectedModelChannels.activeCount}
+                        <span className="text-xs font-semibold text-slate-700 ml-1">/ {selectedModelChannels.dimension}</span>
+                      </span>
+                      <span className="text-[10px] text-slate-600 font-medium mt-0.5 block">Activation &gt; 0.25 threshold</span>
+                    </div>
+
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-700 uppercase font-mono font-bold block">Mean Channel Energy</span>
+                      <span className="text-2xl font-black text-purple-700 font-mono mt-0.5 block">
+                        {selectedModelChannels.meanEnergy}
+                      </span>
+                      <span className="text-[10px] text-slate-600 font-medium mt-0.5 block">Average L1 magnitude</span>
+                    </div>
+
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-700 uppercase font-mono font-bold block">Channel Sparsity</span>
+                      <span className="text-2xl font-black text-amber-700 font-mono mt-0.5 block">
+                        {selectedModelChannels.sparsity}%
+                      </span>
+                      <span className="text-[10px] text-slate-600 font-medium mt-0.5 block">L1/L2 concentration</span>
+                    </div>
+                  </div>
+
+                  {/* Bar Spectrum Chart */}
+                  <div className="w-full h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={selectedModelChannels.channels} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.12)" />
+                        <XAxis
+                          dataKey="channel"
+                          tick={{ fill: '#0f172a', fontSize: 10, fontWeight: 700 }}
+                          interval={selectedModelChannels.dimension > 32 ? 3 : 0}
+                          axisLine={{ stroke: '#64748b', strokeWidth: 1.5 }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fill: '#0f172a', fontSize: 10, fontWeight: 700 }}
+                          axisLine={{ stroke: '#64748b', strokeWidth: 1.5 }}
+                          tickLine={false}
+                        />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const data = payload[0]?.payload;
+                            return (
+                              <div className="p-3 rounded-xl border border-slate-300 text-xs shadow-xl bg-white text-slate-900">
+                                <p className="font-bold text-slate-900">{data.channel}: {data.label}</p>
+                                <p className="text-cyan-700 font-mono font-bold mt-1">Activation Energy: {data.energy}</p>
+                                <p className="text-[10px] text-slate-700 mt-0.5 font-bold">Physical Layer: {embeddingDepth}m depth modulation</p>
+                              </div>
+                            );
+                          }}
+                        />
+                        <Bar
+                          dataKey="energy"
+                          name="Activation Energy"
+                          radius={[4, 4, 0, 0]}
+                        >
+                          {selectedModelChannels.channels.map((_, index) => {
+                            const mKey = selectedEmbeddingModel.toLowerCase();
+                            const color =
+                              mKey === 'cnn'
+                                ? index < 16 ? '#06b6d4' : index < 32 ? '#38bdf8' : '#818cf8'
+                                : mKey === 'swin'
+                                ? '#8b5cf6'
+                                : mKey === 'fused'
+                                ? index < 48 ? '#10b981' : '#06b6d4'
+                                : mKey === 'convgru'
+                                ? '#f97316'
+                                : mKey === 'gnn'
+                                ? '#f43f5e'
+                                : '#f59e0b';
+
+                            return <Cell key={`cell-${index}`} fill={color} opacity={0.85} />;
+                          })}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* ── Cross-Model Latent Cosine Similarity Matrix ── */}
+                <div className="bg-white text-slate-900 p-6 rounded-3xl border border-slate-200 shadow-md">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                        <Activity size={16} className="text-cyan-700" />
+                        Cross-Architecture Latent Cosine Similarity Matrix
+                      </h3>
+                      <p className="text-xs text-slate-600 font-medium mt-0.5">
+                        Pairwise cosine similarity $S_C(u, v) = (u \cdot v) / (||u|| \cdot ||v||)$ revealing semantic alignment across latent representation spaces.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-blue-200 border border-blue-400" /> &lt; 0.60</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-cyan-200 border border-cyan-500" /> 0.70</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-200 border border-emerald-500" /> &gt; 0.85</span>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50">
+                          <th className="px-4 py-3 text-left font-mono text-slate-900 font-black uppercase">Architecture</th>
+                          {cosineSimilarityData.models.map(m => (
+                            <th key={m} className="px-3 py-3 text-center font-mono text-slate-900 font-black uppercase">
+                              {m}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cosineSimilarityData.models.map(rowModel => (
+                          <tr key={rowModel} className="border-b border-slate-100 hover:bg-slate-50/70 transition-colors">
+                            <td className="px-4 py-3 font-bold text-slate-900 uppercase font-mono">
+                              {rowModel}
                             </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            {cosineSimilarityData.models.map(colModel => {
+                              const val = cosineSimilarityData.matrix[rowModel]?.[colModel] ?? 0;
+                              const isDiagonal = rowModel === colModel;
+                              const bgIntensity =
+                                isDiagonal
+                                  ? 'bg-cyan-100 text-cyan-950 font-black border border-cyan-300'
+                                  : val >= 0.85
+                                  ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300'
+                                  : val >= 0.70
+                                  ? 'bg-cyan-50 text-cyan-900 font-semibold border border-cyan-200'
+                                  : val >= 0.60
+                                  ? 'bg-blue-50 text-blue-900 font-semibold border border-blue-200'
+                                  : 'bg-slate-100 text-slate-800 font-semibold border border-slate-300';
 
-              <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 text-xs text-white/60 space-y-1">
-                <p className="font-semibold text-white flex items-center gap-1.5">
-                  <Sparkles size={13} className="text-cyan-400" />
-                  Key Architectural Finding:
-                </p>
-                <p className="text-[11px] leading-relaxed text-white/50">
-                  CNN spatial features and Swin attention tokens exhibit high complementary alignment with the Fused architecture (0.892 and 0.841 respectively), confirming that multi-scale concatenation successfully synthesizes both fine-scale eddy gradients and basin-scale atmospheric forcing.
-                </p>
-              </div>
-            </div>
-
-            {/* ── Dimensionality & Explained Variance ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="glass-panel p-6 rounded-2xl border border-white/10 depth-shadow">
-                <h3 className="font-bold text-white text-base">Embedding Dimension Comparison</h3>
-                <p className="text-xs text-white/40 mt-1 mb-4">
-                  Latent channel capacity across backbones.
-                </p>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={embeddingDimensionData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="model" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="dimension" name="Dimension (D)" fill="#06b6d4" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                              return (
+                                <td key={colModel} className="px-3 py-2.5 text-center">
+                                  <span className={`px-2.5 py-1 rounded-lg font-mono text-[11px] inline-block ${bgIntensity}`}>
+                                    {val.toFixed(3)}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-
-              <div className="glass-panel p-6 rounded-2xl border border-white/10 depth-shadow">
-                <h3 className="font-bold text-white text-base">PCA Explained Variance Ratio</h3>
-                <p className="text-xs text-white/40 mt-1 mb-4">
-                  Variance captured by PC1 and PC2 principal axes.
-                </p>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={embeddingVarianceData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="model" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis unit="%" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend />
-                      <Bar dataKey="PC1" name="PC1 (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="PC2" name="PC2 (%)" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Verified Backend Shapes Table ── */}
-            <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden depth-shadow">
-              <div className="px-6 py-4 border-b border-white/10">
-                <h3 className="font-semibold text-white">
-                  Audited Neural Tensor Specifications
-                </h3>
-                <p className="text-xs text-white/40 mt-0.5">
-                  Live tensor shapes and dimensions returned by the backend service.
-                </p>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="px-4 py-3 text-left text-white/40 uppercase font-mono">Architecture</th>
-                      <th className="px-4 py-3 text-left text-white/40 uppercase font-mono">Input Shape</th>
-                      <th className="px-4 py-3 text-left text-white/40 uppercase font-mono">Embedding Shape</th>
-                      <th className="px-4 py-3 text-left text-white/40 uppercase font-mono">Dimension</th>
-                      <th className="px-4 py-3 text-left text-white/40 uppercase font-mono">Samples</th>
-                      <th className="px-4 py-3 text-left text-white/40 uppercase font-mono">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {backendEmbeddingShapeRows.map(row => (
-                      <tr key={row.label} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="px-4 py-3 font-semibold text-white font-mono">{row.label}</td>
-                        <td className="px-4 py-3 font-mono text-white/60">
-                          {row.featureShape ? `[${row.featureShape.join(', ')}]` : '[7, 101, 241]'}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-white/60">
-                          {row.embeddingShape ? `[${row.embeddingShape.join(', ')}]` : `[7, ${row.dimension ?? 48}]`}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-cyan-400 font-bold">{row.dimension ?? '—'}</td>
-                        <td className="px-4 py-3 font-mono text-white/60">{row.samples ?? 7}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            {row.status?.toUpperCase() ?? 'ACTIVE'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            )}
 
           </div>
         )}

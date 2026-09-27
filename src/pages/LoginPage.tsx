@@ -25,8 +25,8 @@ export default function LoginPage() {
     urlRole === 'government'
       ? 'government'
       : urlRole === 'researcher'
-      ? 'researcher'
-      : 'general';
+        ? 'researcher'
+        : 'general';
 
   const [role, setRole] = useState<'general' | 'government' | 'researcher'>(initialRole);
   const [loginId, setLoginId] = useState(MOCK_USERS[initialRole].email);
@@ -142,11 +142,10 @@ export default function LoginPage() {
           {/* 1. NORMAL CITIZEN */}
           <div
             onClick={() => handleSelectRole('general')}
-            className={`bg-white rounded-lg p-5 border-2 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
-              role === 'general'
+            className={`bg-white rounded-lg p-5 border-2 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${role === 'general'
                 ? 'border-[#0b3b60] ring-2 ring-[#0b3b60]/20 bg-blue-50/40'
                 : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
-            }`}
+              }`}
           >
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -189,11 +188,10 @@ export default function LoginPage() {
           {/* 2. GOVERNMENT OFFICIAL */}
           <div
             onClick={() => handleSelectRole('government')}
-            className={`bg-white rounded-lg p-5 border-2 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
-              role === 'government'
+            className={`bg-white rounded-lg p-5 border-2 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${role === 'government'
                 ? 'border-amber-600 ring-2 ring-amber-600/20 bg-amber-50/40'
                 : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
-            }`}
+              }`}
           >
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -216,7 +214,7 @@ export default function LoginPage() {
               </div>
 
               <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                Access official NDMA disaster warnings, cyclone heat fuel alerts, coastal evacuation protocols, and bulletin dispatch.
+                Access official NDMA disaster warnings, cyclone heat fuel alerts, coastal evacuation protocols, technical documentation & bulletin dispatch.
               </p>
             </div>
 
@@ -237,11 +235,10 @@ export default function LoginPage() {
           {/* 3. RESEARCHERS & SCIENTISTS */}
           <div
             onClick={() => handleSelectRole('researcher')}
-            className={`bg-white rounded-lg p-5 border-2 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
-              role === 'researcher'
+            className={`bg-white rounded-lg p-5 border-2 transition-all cursor-pointer flex flex-col justify-between shadow-xs ${role === 'researcher'
                 ? 'border-purple-600 ring-2 ring-purple-600/20 bg-purple-50/40'
                 : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
-            }`}
+              }`}
           >
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -362,13 +359,12 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-2.5 px-4 rounded text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors shadow-xs ${
-                role === 'government'
+              className={`w-full py-2.5 px-4 rounded text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors shadow-xs ${role === 'government'
                   ? 'bg-[#d97706] hover:bg-[#b45309]'
                   : role === 'researcher'
-                  ? 'bg-purple-700 hover:bg-purple-800'
-                  : 'bg-[#0b3b60] hover:bg-[#082a45]'
-              }`}
+                    ? 'bg-purple-700 hover:bg-purple-800'
+                    : 'bg-[#0b3b60] hover:bg-[#082a45]'
+                }`}
             >
               {loading ? (
                 <>

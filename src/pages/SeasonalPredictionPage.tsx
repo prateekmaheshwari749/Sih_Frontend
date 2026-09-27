@@ -6,6 +6,13 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import GovFooter from '../components/GovFooter';
+import {
+  fetchSeasonalConfig,
+  fetchSeasonalPrediction,
+  fetchSeasonalStatus,
+  type SeasonalConfigResponse,
+  type SeasonalPredictionResponse,
+} from '../api/oceanApi';
 
 // ── North Indian Ocean Domain Constants ──
 const LAT_MIN = 5.0;
@@ -22,265 +29,475 @@ interface ForecastMonthData {
   monthName: string;
   leadTimeLabel: string;
   targetDateStr: string;
-  meanSST: number;
-  minSST: number;
-  maxSST: number;
-  meanAnomaly: number;
-  anomalyStatus: 'Normal' | 'Moderate Warm' | 'Active Heatwave' | 'Cool Phase';
+  meanSST: number | null;
+  minSST: number | null;
+  maxSST: number | null;
+  meanAnomaly: number | null;
+  anomalyMin: number | null;
+  anomalyMax: number | null;
+  anomalyStatus: 'Positive anomaly' | 'Negative anomaly' | 'Near climatology' | 'No data';
   anomalyStatusColor: string;
 }
 
-// ── Mock Climatology & FNO Seasonal Forecast Engine ──
-// Easily replaceable with real backend endpoint (e.g., fetch('/api/fno/seasonal'))
-function generateSeasonalData(monthOffset: number): {
-  sstGrid: number[][];
-  climatologyGrid: number[][];
-  anomalyGrid: number[][];
-} {
-  const sstGrid: number[][] = [];
-  const climatologyGrid: number[][] = [];
-  const anomalyGrid: number[][] = [];
+// ── Backend grid helpers ──
+function monthLabel(value: string): string {
+  const date = new Date(`${value}-01T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('default', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
-  for (let r = 0; r < ROWS; r++) {
-    const sstRow: number[] = [];
-    const climRow: number[] = [];
-    const anomRow: number[] = [];
-
-    const lat = LAT_MAX - (r / (ROWS - 1)) * (LAT_MAX - LAT_MIN);
-
-    for (let c = 0; c < COLS; c++) {
-      const lon = LON_MIN + (c / (COLS - 1)) * (LON_MAX - LON_MIN);
-
-      // Check if coordinate is land (Indian Subcontinent, Arabian Peninsula, Southeast Asia)
-      const isLand = checkIsLand(lat, lon);
-
-      if (isLand) {
-        sstRow.push(NaN);
-        climRow.push(NaN);
-        anomRow.push(NaN);
-      } else {
-        // Base tropical SST gradient (warmer near equator, cooler near north & Persian Gulf in winter)
-        const baseEquator = 29.8 - ((lat - 5.0) * 0.22);
-        
-        // Warm pool in eastern Arabian Sea / Bay of Bengal
-        const warmPoolBonus = Math.sin(((lon - 70) / 30) * Math.PI) * Math.cos(((lat - 10) / 20) * Math.PI) * 1.4;
-        
-        // Seasonal cycle modulation based on monthOffset
-        const seasonalShift = Math.cos((monthOffset * 0.5) + (lat * 0.05)) * 0.9;
-        
-        // Climatology (30-year normal baseline)
-        const clim = +(baseEquator + (warmPoolBonus * 0.7) - (lat > 22 ? 2.1 : 0)).toFixed(2);
-
-        // FNO AI Prediction with cross-scale spatiotemporal perturbation
-        const fnoPerturbation = Math.sin((lon * 0.15) + (lat * 0.2) + (monthOffset * 1.2)) * 0.65 
-                              + (monthOffset === 1 ? 0.45 : monthOffset === 2 ? 0.72 : 0.38);
-        
-        const predictedSst = +(clim + fnoPerturbation).toFixed(2);
-        const anomaly = +(predictedSst - clim).toFixed(2);
-
-        sstRow.push(predictedSst);
-        climRow.push(clim);
-        anomRow.push(anomaly);
-      }
+function finiteValues(grid: number[][]): number[] {
+  const values: number[] = [];
+  for (const row of grid) {
+    for (const value of row) {
+      if (Number.isFinite(value)) values.push(value);
     }
-    sstGrid.push(sstRow);
-    climatologyGrid.push(climRow);
-    anomalyGrid.push(anomRow);
   }
-
-  return { sstGrid, climatologyGrid, anomalyGrid };
+  return values;
 }
 
-// Polygon & box land boundary approximation for North Indian Ocean
-function checkIsLand(lat: number, lon: number): boolean {
-  // Indian Peninsula
-  if (lat >= 8.0 && lat <= 28.0 && lon >= 68.5 && lon <= 88.5) {
-    const centerLon = 78.5;
-    const halfWidth = (lat - 8.0) * 0.95 + 4.5;
-    if (Math.abs(lon - centerLon) < halfWidth && lat < 24.5) return true;
-    if (lat >= 24.5 && lon >= 70.0 && lon <= 89.0) return true;
-  }
-  // Sri Lanka
-  if (lat >= 5.8 && lat <= 9.8 && lon >= 79.5 && lon <= 81.8) return true;
-  // Arabian Peninsula / Middle East
-  if (lon < 60.0 && lat > 14.0) return true;
-  if (lon < 54.0 && lat >= 12.0) return true;
-  // Southeast Asia / Myanmar / Thailand / Malacca
-  if (lon > 93.0 && lat > 15.0) return true;
-  if (lon > 98.0 && lat >= 5.0) return true;
-  // North of 25N (Himalayas / Pakistan / Iran)
-  if (lat >= 26.0 && lon < 69.0) return true;
-  if (lat >= 27.5) return true;
-
-  return false;
+function flattenBackendGrid(
+  source: number[][] | undefined,
+): number[][] {
+  if (!source?.length || !source[0]?.length) return [];
+  return source;
 }
 
-// ── Color Mappers ──
-// SST Color: 24°C (Deep Navy/Blue) -> 27°C (Cyan/Teal) -> 29°C (Yellow/Amber) -> 32°C (Vibrant Crimson)
-function getSstColor(t: number): string {
-  if (isNaN(t)) return '#cbd5e1'; // Clean slate-300 for land in light mode
-  const min = 24.0;
-  const max = 32.0;
-  const norm = Math.max(0, Math.min(1, (t - min) / (max - min)));
-
-  if (norm < 0.25) {
-    const f = norm / 0.25;
-    return `rgb(${Math.round(30 + 20 * f)}, ${Math.round(80 + 100 * f)}, ${Math.round(200 + 40 * f)})`;
-  } else if (norm < 0.5) {
-    const f = (norm - 0.25) / 0.25;
-    return `rgb(${Math.round(50 + 50 * f)}, ${Math.round(180 + 40 * f)}, ${Math.round(240 - 100 * f)})`;
-  } else if (norm < 0.75) {
-    const f = (norm - 0.5) / 0.25;
-    return `rgb(${Math.round(100 + 140 * f)}, ${Math.round(220 - 40 * f)}, ${Math.round(140 - 110 * f)})`;
-  } else {
-    const f = (norm - 0.75) / 0.25;
-    return `rgb(${Math.round(240 + 15 * f)}, ${Math.round(180 - 140 * f)}, ${Math.round(30 - 10 * f)})`;
+function resampleGrid(
+  source: number[][],
+  targetRows: number,
+  targetCols: number,
+): number[][] {
+  if (!source.length || !source[0]?.length) {
+    return Array.from({ length: targetRows }, () =>
+      Array.from({ length: targetCols }, () => Number.NaN),
+    );
   }
+
+  const sourceRows = source.length;
+  const sourceCols = source[0].length;
+
+  return Array.from({ length: targetRows }, (_, r) => {
+    const sourceR = Math.min(
+      sourceRows - 1,
+      Math.round((r / Math.max(1, targetRows - 1)) * (sourceRows - 1)),
+    );
+
+    return Array.from({ length: targetCols }, (_, c) => {
+      const sourceC = Math.min(
+        sourceCols - 1,
+        Math.round((c / Math.max(1, targetCols - 1)) * (sourceCols - 1)),
+      );
+      return Number(source[sourceR]?.[sourceC]);
+    });
+  });
 }
 
-// Anomaly Color: -1.5°C (Cool Navy Blue) -> 0.0°C (Neutral Clean White) -> +1.5°C (Warm Crimson Red)
-function getAnomalyColor(a: number): string {
-  if (isNaN(a)) return '#cbd5e1'; // Land in light mode
-  const clamped = Math.max(-1.5, Math.min(1.5, a));
-  const norm = (clamped + 1.5) / 3.0; // 0 to 1
+function getDynamicColor(
+  value: number,
+  min: number,
+  max: number,
+  cold: [number, number, number],
+  hot: [number, number, number],
+): string {
+  if (!Number.isFinite(value)) return '#cbd5e1';
 
-  if (norm < 0.5) {
-    const f = norm / 0.5; // 0 (cold royal blue) to 1 (neutral clean white)
-    const r = Math.round(37 + (255 - 37) * f);
-    const g = Math.round(99 + (255 - 99) * f);
-    const b = Math.round(235 + (255 - 235) * f);
-    return `rgb(${r}, ${g}, ${b})`;
-  } else {
-    const f = (norm - 0.5) / 0.5; // 0 (neutral white) to 1 (hot crimson red)
-    const r = Math.round(255 - (255 - 220) * f);
-    const g = Math.round(255 - (255 - 38) * f);
-    const b = Math.round(255 - (255 - 38) * f);
-    return `rgb(${r}, ${g}, ${b})`;
-  }
+  const span = Math.max(Math.abs(max - min), 1e-6);
+  const norm = Math.max(0, Math.min(1, (value - min) / span));
+
+  const r = Math.round(cold[0] + (hot[0] - cold[0]) * norm);
+  const g = Math.round(cold[1] + (hot[1] - cold[1]) * norm);
+  const b = Math.round(cold[2] + (hot[2] - cold[2]) * norm);
+
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
-export default function SeasonalPredictionPage({ embedded = false }: { embedded?: boolean } = {}) {
+function getAnomalyColor(
+  value: number,
+  min: number,
+  max: number,
+): string {
+  if (!Number.isFinite(value)) return '#cbd5e1';
+
+  const absMax = Math.max(
+    Math.abs(min),
+    Math.abs(max),
+    1e-6,
+  );
+
+  const clamped = Math.max(-absMax, Math.min(absMax, value));
+
+  if (clamped >= 0) {
+    const norm = clamped / absMax;
+    return `rgb(${Math.round(255 - 35 * norm)}, ${Math.round(255 - 195 * norm)}, ${Math.round(255 - 195 * norm)})`;
+  }
+
+  const norm = Math.abs(clamped) / absMax;
+  return `rgb(${Math.round(255 - 210 * norm)}, ${Math.round(255 - 155 * norm)}, ${Math.round(255 - 15 * norm)})`;
+}
+
+// ── Production seasonal FNO page ──
+export default function SeasonalPredictionPage(
+  { embedded = false }: { embedded?: boolean } = {},
+) {
+  // The production Seasonal predictor requires the final month of a complete
+  // 12-month input window. The current live 2026 source has complete monthly
+  // coverage through August 2026, so this is the safe default.
+  const [inputEndMonth, setInputEndMonth] = useState<string>('2026-08');
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(0);
+
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
-  const [hoveredCell, setHoveredCell] = useState<{ lat: number; lon: number; sst: number; anomaly: number } | null>(null);
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
+  const [backendMessage, setBackendMessage] = useState<string>(
+    'Checking Seasonal FNO backend…',
+  );
+  const [seasonalConfig, setSeasonalConfig] =
+    useState<SeasonalConfigResponse | null>(null);
+  const [seasonalResult, setSeasonalResult] =
+    useState<SeasonalPredictionResponse | null>(null);
+  const [seasonalError, setSeasonalError] = useState<string | null>(null);
+  const [lastGeneratedAt, setLastGeneratedAt] =
+    useState<string | null>(null);
+
+  const [hoveredCell, setHoveredCell] = useState<{
+    lat: number;
+    lon: number;
+    sst: number;
+    anomaly: number;
+  } | null>(null);
 
   const sstCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const anomCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Month configurations
-  const forecastMonths: ForecastMonthData[] = useMemo(() => {
-    const now = new Date();
-    return [0, 1, 2].map((offset) => {
-      const d = new Date(now.getFullYear(), now.getMonth() + 1 + offset, 1);
-      const monthName = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-      const leadTimeLabel = `Month +${offset + 1}`;
-      
-      const meanSST = offset === 0 ? 28.74 : offset === 1 ? 28.42 : 27.91;
-      const minSST = offset === 0 ? 25.1 : offset === 1 ? 24.8 : 24.2;
-      const maxSST = offset === 0 ? 31.2 : offset === 1 ? 30.9 : 30.4;
-      const meanAnomaly = offset === 0 ? +0.58 : offset === 1 ? +0.72 : +0.41;
+  // Verify that the actual Seasonal FNO assets are available before inference.
+  useEffect(() => {
+    let cancelled = false;
 
-      return {
-        monthIndex: offset,
-        monthName,
-        leadTimeLabel,
-        targetDateStr: d.toISOString().slice(0, 7),
-        meanSST,
-        minSST,
-        maxSST,
-        meanAnomaly,
-        anomalyStatus: meanAnomaly > 0.6 ? 'Active Heatwave' : meanAnomaly > 0.3 ? 'Moderate Warm' : 'Normal',
-        anomalyStatusColor: meanAnomaly > 0.6 
-          ? 'text-rose-800 bg-rose-50 border-rose-200' 
-          : 'text-amber-800 bg-amber-50 border-amber-200'
-      };
-    });
+    const loadBackendState = async () => {
+      try {
+        const status = await fetchSeasonalStatus();
+        if (cancelled) return;
+
+        setBackendReady(Boolean(status.available));
+        setBackendMessage(
+          status.available
+            ? `Seasonal FNO ready • ${status.device ?? 'backend device'}`
+            : 'Seasonal FNO assets are unavailable',
+        );
+
+        try {
+          const config = await fetchSeasonalConfig();
+          if (!cancelled) setSeasonalConfig(config);
+        } catch (configError) {
+          if (!cancelled) {
+            console.warn('[Seasonal] Config request failed:', configError);
+          }
+        }
+      } catch (error) {
+        if (cancelled) return;
+
+        setBackendReady(false);
+        setBackendMessage(
+          error instanceof Error
+            ? error.message
+            : 'Unable to reach Seasonal FNO backend',
+        );
+      }
+    };
+
+    void loadBackendState();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const activeMonth = forecastMonths[selectedMonthIndex];
+  // Map the real backend output to the three forecast month cards.
+  const forecastMonths: ForecastMonthData[] = useMemo(() => {
+    const months =
+      seasonalResult?.forecast_months ??
+      (() => {
+        const base = new Date(`${inputEndMonth}-01T00:00:00`);
+        return [1, 2, 3].map((offset) => {
+          const date = new Date(
+            base.getFullYear(),
+            base.getMonth() + offset,
+            1,
+          );
+          return `${date.getFullYear()}-${String(
+            date.getMonth() + 1,
+          ).padStart(2, '0')}`;
+        });
+      })();
 
-  // Compute 2D gridded values
-  const { sstGrid, climatologyGrid, anomalyGrid } = useMemo(() => {
-    return generateSeasonalData(selectedMonthIndex + 1);
-  }, [selectedMonthIndex]);
+    return months.map((targetMonth, index) => {
+      const sstSource =
+        seasonalResult?.forecast_sst_normalized?.[index]?.[0] ?? [];
+      const anomalySource =
+        seasonalResult?.forecast_anomaly_normalized?.[index]?.[0] ?? [];
 
-  // Render SST & Anomaly Canvases
+      const sstValues = finiteValues(sstSource);
+      const anomalyValues = finiteValues(anomalySource);
+
+      const meanSST = sstValues.length
+        ? sstValues.reduce((sum, value) => sum + value, 0) /
+          sstValues.length
+        : null;
+
+      const meanAnomaly = anomalyValues.length
+        ? anomalyValues.reduce((sum, value) => sum + value, 0) /
+          anomalyValues.length
+        : null;
+
+      const anomalyMin = anomalyValues.length
+        ? Math.min(...anomalyValues)
+        : null;
+      const anomalyMax = anomalyValues.length
+        ? Math.max(...anomalyValues)
+        : null;
+
+      const anomalyStatus =
+        meanAnomaly == null
+          ? 'No data'
+          : meanAnomaly > 0.05
+            ? 'Positive anomaly'
+            : meanAnomaly < -0.05
+              ? 'Negative anomaly'
+              : 'Near climatology';
+
+      const anomalyStatusColor =
+        anomalyStatus === 'Positive anomaly'
+          ? 'text-rose-300 bg-rose-950/70 border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.25)]'
+          : anomalyStatus === 'Negative anomaly'
+            ? 'text-cyan-300 bg-cyan-950/70 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+            : anomalyStatus === 'Near climatology'
+              ? 'text-slate-300 bg-slate-900/70 border-white/20'
+              : 'text-slate-400 bg-slate-900/50 border-white/10';
+
+      return {
+        monthIndex: index,
+        monthName: monthLabel(targetMonth),
+        leadTimeLabel: `Month +${index + 1}`,
+        targetDateStr: targetMonth,
+        meanSST,
+        minSST: sstValues.length ? Math.min(...sstValues) : null,
+        maxSST: sstValues.length ? Math.max(...sstValues) : null,
+        meanAnomaly,
+        anomalyMin,
+        anomalyMax,
+        anomalyStatus,
+        anomalyStatusColor,
+      };
+    });
+  }, [inputEndMonth, seasonalResult]);
+
+  const activeMonth = forecastMonths[selectedMonthIndex] ?? forecastMonths[0];
+
+  const selectedSSTSource =
+    seasonalResult?.forecast_sst_normalized?.[selectedMonthIndex]?.[0] ??
+    [];
+
+  const selectedAnomalySource =
+    seasonalResult?.forecast_anomaly_normalized?.[selectedMonthIndex]?.[0] ??
+    [];
+
+  const sstGrid = useMemo(
+    () => resampleGrid(selectedSSTSource, ROWS, COLS),
+    [selectedSSTSource],
+  );
+
+  const anomalyGrid = useMemo(
+    () => resampleGrid(selectedAnomalySource, ROWS, COLS),
+    [selectedAnomalySource],
+  );
+
+  const sstValues = finiteValues(selectedSSTSource);
+  const anomalyValues = finiteValues(selectedAnomalySource);
+
+  const sstMin = sstValues.length ? Math.min(...sstValues) : 0;
+  const sstMax = sstValues.length ? Math.max(...sstValues) : 1;
+  const anomalyMin = anomalyValues.length
+    ? Math.min(...anomalyValues)
+    : -1;
+  const anomalyMax = anomalyValues.length
+    ? Math.max(...anomalyValues)
+    : 1;
+
+  // Render the real backend grids into lightweight canvases.
   useEffect(() => {
-    // 1. Draw SST Canvas
     const sstCanvas = sstCanvasRef.current;
+
     if (sstCanvas) {
       const ctx = sstCanvas.getContext('2d');
+
       if (ctx) {
         ctx.clearRect(0, 0, sstCanvas.width, sstCanvas.height);
+
         const cellW = sstCanvas.width / COLS;
         const cellH = sstCanvas.height / ROWS;
 
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            const val = sstGrid[r][c];
-            ctx.fillStyle = getSstColor(val);
-            ctx.fillRect(c * cellW, r * cellH, cellW + 0.5, cellH + 0.5);
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            const value = sstGrid[r]?.[c] ?? Number.NaN;
+
+            ctx.fillStyle = getDynamicColor(
+              value,
+              sstMin,
+              sstMax,
+              [25, 90, 220],
+              [225, 45, 45],
+            );
+
+            ctx.fillRect(
+              c * cellW,
+              r * cellH,
+              cellW + 0.5,
+              cellH + 0.5,
+            );
           }
         }
       }
     }
 
-    // 2. Draw Anomaly Canvas
-    const anomCanvas = anomCanvasRef.current;
-    if (anomCanvas) {
-      const ctx = anomCanvas.getContext('2d');
+    const anomalyCanvas = anomCanvasRef.current;
+
+    if (anomalyCanvas) {
+      const ctx = anomalyCanvas.getContext('2d');
+
       if (ctx) {
-        ctx.clearRect(0, 0, anomCanvas.width, anomCanvas.height);
-        const cellW = anomCanvas.width / COLS;
-        const cellH = anomCanvas.height / ROWS;
+        ctx.clearRect(
+          0,
+          0,
+          anomalyCanvas.width,
+          anomalyCanvas.height,
+        );
 
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            const val = anomalyGrid[r][c];
-            ctx.fillStyle = getAnomalyColor(val);
-            ctx.fillRect(c * cellW, r * cellH, cellW + 0.5, cellH + 0.5);
+        const cellW = anomalyCanvas.width / COLS;
+        const cellH = anomalyCanvas.height / ROWS;
+
+        for (let r = 0; r < ROWS; r += 1) {
+          for (let c = 0; c < COLS; c += 1) {
+            const value = anomalyGrid[r]?.[c] ?? Number.NaN;
+
+            ctx.fillStyle = getAnomalyColor(
+              value,
+              anomalyMin,
+              anomalyMax,
+            );
+
+            ctx.fillRect(
+              c * cellW,
+              r * cellH,
+              cellW + 0.5,
+              cellH + 0.5,
+            );
           }
         }
       }
     }
-  }, [sstGrid, anomalyGrid]);
+  }, [
+    sstGrid,
+    anomalyGrid,
+    sstMin,
+    sstMax,
+    anomalyMin,
+    anomalyMax,
+  ]);
 
-  // Trigger Forecast Generation
-  const handleGenerateForecast = () => {
+  const handleGenerateForecast = async () => {
+    if (isGenerating) return;
+
     setIsGenerating(true);
-    setTimeout(() => {
+    setSeasonalError(null);
+    setBackendMessage('Running production Seasonal FNO inference…');
+
+    try {
+      const result = await fetchSeasonalPrediction(inputEndMonth);
+
+      if (!result.success) {
+        throw new Error('Seasonal FNO backend returned success=false.');
+      }
+
+      setSeasonalResult(result);
+      setBackendReady(true);
+      setBackendMessage(
+        `Production Seasonal FNO complete • ${result.device}`,
+      );
+      setSelectedMonthIndex(0);
+      setLastGeneratedAt(
+        new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Seasonal FNO inference failed.';
+
+      setSeasonalError(message);
+      setBackendMessage(message);
+      setSeasonalResult(null);
+    } finally {
       setIsGenerating(false);
-      setLastGeneratedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    }, 1100);
+    }
   };
 
-  // Canvas Mouse Move Handler for Hover Coordinates
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasMouseMove = (
+    e: React.MouseEvent<HTMLCanvasElement>,
+  ) => {
     const canvas = e.currentTarget;
     const rect = canvas.getBoundingClientRect();
+
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
     const col = Math.floor((x / rect.width) * COLS);
     const row = Math.floor((y / rect.height) * ROWS);
 
-    if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
-      const lat = +(LAT_MAX - (row / (ROWS - 1)) * (LAT_MAX - LAT_MIN)).toFixed(1);
-      const lon = +(LON_MIN + (col / (COLS - 1)) * (LON_MAX - LON_MIN)).toFixed(1);
-      const sst = sstGrid[row][col];
-      const anomaly = anomalyGrid[row][col];
+    if (
+      row < 0 ||
+      row >= ROWS ||
+      col < 0 ||
+      col >= COLS
+    ) {
+      setHoveredCell(null);
+      return;
+    }
 
-      if (!isNaN(sst)) {
-        setHoveredCell({ lat, lon, sst, anomaly });
-      } else {
-        setHoveredCell(null);
-      }
+    const lat = +(
+      LAT_MAX -
+      (row / (ROWS - 1)) * (LAT_MAX - LAT_MIN)
+    ).toFixed(1);
+
+    const lon = +(
+      LON_MIN +
+      (col / (COLS - 1)) * (LON_MAX - LON_MIN)
+    ).toFixed(1);
+
+    const sst = sstGrid[row]?.[col] ?? Number.NaN;
+    const anomaly =
+      anomalyGrid[row]?.[col] ?? Number.NaN;
+
+    if (Number.isFinite(sst) || Number.isFinite(anomaly)) {
+      setHoveredCell({
+        lat,
+        lon,
+        sst,
+        anomaly,
+      });
+    } else {
+      setHoveredCell(null);
     }
   };
 
   const mainContent = (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-7 w-full text-slate-800">
+    <div className="seasonal-shell cyclone-shell cyclone-scope dark-glass-scope text-white max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-7 w-full">
 
         {/* ══════════════════════════════════════════════════════════════
             1. TOP / HERO SECTION
@@ -288,7 +505,7 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
         <section className="relative pb-2">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2 max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/30 text-white text-xs font-mono font-bold tracking-wide uppercase backdrop-blur-md">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-mono font-bold tracking-wide uppercase backdrop-blur-md">
                 <Sparkles size={13} className="text-cyan-300" />
                 <span>OceanEmbed Extension &bull; Spatiotemporal FNO</span>
               </div>
@@ -300,40 +517,64 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
               </h1>
 
               <p className="text-base sm:text-lg font-bold text-sky-100">
-                AI-powered forecasting of North Indian Ocean temperature
+                Production AI forecasting of North Indian Ocean temperature anomalies
               </p>
 
-              <p className="text-xs sm:text-sm text-sky-100/90 leading-relaxed pt-1 font-medium">
-                Uses historical surface and OceanEmbed subsurface ocean information to predict Sea Surface Temperature (SST) for the next 3 months.
+              <p className="text-xs sm:text-sm text-sky-100/80 leading-relaxed pt-1 font-medium">
+                Uses the backend's 12-month normalized multi-parameter input and production 3D Spatiotemporal FNO to forecast the next 3 months.
               </p>
             </div>
 
             {/* Action Button & Status */}
             <div className="flex flex-col items-start md:items-end gap-3 shrink-0">
-              <button
-                onClick={handleGenerateForecast}
-                disabled={isGenerating}
-                className="px-6 py-3.5 rounded-xl bg-white hover:bg-sky-50 active:scale-95 text-[#005088] font-black text-sm tracking-wide flex items-center gap-2.5 transition-all shadow-lg hover:shadow-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border border-white"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin text-[#005088]" />
-                    <span>Computing Spatiotemporal FNO...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={18} className="fill-[#005088] text-[#005088]" />
-                    <span>Generate Forecast</span>
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col items-stretch gap-3 w-full md:w-auto">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-300">
+                  Input-end month
+                  <input
+                    type="month"
+                    value={inputEndMonth}
+                    min="2019-01"
+                    max="2026-08"
+                    onChange={(event) => {
+                      setInputEndMonth(event.target.value);
+                      setSeasonalResult(null);
+                      setSeasonalError(null);
+                      setSelectedMonthIndex(0);
+                    }}
+                    className="mt-1.5 w-full md:w-48 rounded-lg border border-white/20 bg-slate-950/80 px-3 py-2 text-sm font-bold text-white outline-none focus:border-cyan-400"
+                  />
+                </label>
 
-              <div className="text-[11px] font-mono text-sky-200/90 flex items-center gap-2 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Domain: 5°N–30°N, 45°E–105°E</span>
-                {lastGeneratedAt && (
-                  <span className="text-sky-300/80">&bull; Updated {lastGeneratedAt}</span>
-                )}
+                <button
+                  onClick={handleGenerateForecast}
+                  disabled={isGenerating || backendReady === false}
+                  className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-95 text-white font-black text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-cyan-500/25 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border border-cyan-400/40"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin text-white" />
+                      <span>Running Production FNO...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={18} className="fill-white text-white" />
+                      <span>Run Production Forecast</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="text-[10px] font-mono text-slate-300">
+                  {backendReady === true ? '● Backend ready' : backendReady === false ? '● Backend unavailable' : '● Checking backend…'}
+                  {' '} {backendMessage}
+                </div>
+
+                <div className="text-[10px] font-mono text-cyan-300/90 flex items-center gap-2 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Domain: 5°N–30°N, 45°E–105°E</span>
+                  {lastGeneratedAt && (
+                    <span className="text-cyan-200/80">&bull; Updated {lastGeneratedAt}</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -342,62 +583,62 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
         {/* ══════════════════════════════════════════════════════════════
             2. INPUT → MODEL → OUTPUT CONCEPTUAL PIPELINE FLOW
         ══════════════════════════════════════════════════════════════ */}
-        <section className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm">
+        <section className="glass rounded-2xl p-5 sm:p-6 border border-cyan-500/30 depth-shadow">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4 relative">
             
             {/* Step 1: 12 Months Input */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-slate-950/70 border border-white/10 space-y-2 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest block">Input Feed</span>
-                <h3 className="font-bold text-sm sm:text-base text-slate-900">12 Months of Ocean Data</h3>
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Input Feed</span>
+                <h3 className="font-bold text-sm sm:text-base text-white">12-Month Production Input Window</h3>
               </div>
-              <div className="pt-2 border-t border-slate-200">
-                <p className="text-[11px] font-mono font-bold text-slate-600 flex flex-wrap gap-1">
-                  <span className="text-red-700">SST</span> &bull;
-                  <span className="text-blue-700">SSS</span> &bull;
-                  <span className="text-cyan-800">SLA</span> &bull;
-                  <span className="text-emerald-800">U</span> &bull;
-                  <span className="text-teal-800">V</span> &bull;
-                  <span className="text-purple-800">Subsurface (0–1000m)</span>
+              <div className="pt-2 border-t border-white/10">
+                <p className="text-[11px] font-mono font-bold text-slate-300 flex flex-wrap gap-1">
+                  <span className="text-red-400">SST</span> &bull;
+                  <span className="text-cyan-300">SSS</span> &bull;
+                  <span className="text-sky-300">SLA</span> &bull;
+                  <span className="text-emerald-400">U</span> &bull;
+                  <span className="text-teal-300">V</span> &bull;
+                  <span className="text-purple-300">Subsurface (0–1000m)</span>
                 </p>
               </div>
             </div>
 
             {/* Step 2: Spatiotemporal FNO Model */}
-            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-mono font-bold text-[#005088] uppercase tracking-widest block">Neural Operator</span>
-                <h3 className="font-black text-sm sm:text-base text-[#005088]">Spatiotemporal FNO</h3>
+                <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-widest block">Neural Operator</span>
+                <h3 className="font-black text-sm sm:text-base text-cyan-300">Spatiotemporal FNO</h3>
               </div>
-              <div className="pt-2 border-t border-blue-200">
-                <p className="text-[11px] font-bold text-[#005088]">
+              <div className="pt-2 border-t border-cyan-500/30">
+                <p className="text-[11px] font-bold text-cyan-200">
                   Spatial + Temporal Learning (Fourier Neural Operator)
                 </p>
               </div>
             </div>
 
             {/* Step 3: 3-Month Forecast */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-slate-950/70 border border-white/10 space-y-2 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-mono font-bold text-blue-700 uppercase tracking-widest block">Forward Output</span>
-                <h3 className="font-bold text-sm sm:text-base text-slate-900">3-Month SST Forecast</h3>
+                <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-widest block">Forward Output</span>
+                <h3 className="font-bold text-sm sm:text-base text-white">3-Month SST Forecast</h3>
               </div>
-              <div className="pt-2 border-t border-slate-200">
-                <p className="text-[11px] text-slate-500">
+              <div className="pt-2 border-t border-white/10">
+                <p className="text-[11px] text-slate-400">
                   Lead Time: +1, +2, +3 Months continuous thermal evolution
                 </p>
               </div>
             </div>
 
             {/* Step 4: SST Anomaly */}
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 space-y-2 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-widest block">Deviation Index</span>
-                <h3 className="font-black text-sm sm:text-base text-amber-900">SST Anomaly</h3>
+                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block">Deviation Index</span>
+                <h3 className="font-black text-sm sm:text-base text-amber-300">SST Anomaly</h3>
               </div>
-              <div className="pt-2 border-t border-amber-200">
-                <p className="text-[11px] font-mono font-bold text-amber-800">
-                  Predicted SST − Climatology
+              <div className="pt-2 border-t border-amber-500/30">
+                <p className="text-[11px] font-mono font-bold text-amber-300">
+                  Predicted normalized SST − monthly climatology
                 </p>
               </div>
             </div>
@@ -405,33 +646,58 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
           </div>
         </section>
 
+        {seasonalError && (
+          <section className="rounded-2xl border border-rose-500/30 bg-rose-950/40 p-4 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-rose-400 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <div className="font-black text-rose-300">Seasonal FNO inference failed</div>
+              <div className="text-rose-200 mt-1">{seasonalError}</div>
+            </div>
+          </section>
+        )}
+
+        {seasonalResult && (
+          <section className="rounded-2xl border border-emerald-500/30 bg-emerald-950/40 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-emerald-300">
+              <CheckCircle2 size={17} />
+              Production Seasonal FNO result received
+            </div>
+            <div className="text-[11px] font-mono text-emerald-200/90">
+              Model: {seasonalConfig?.model ?? seasonalResult.model} &bull;
+              Input: {seasonalResult.input_months[0]} → {seasonalResult.input_months.at(-1)} &bull;
+              Output: {seasonalResult.forecast_months.join(', ')} &bull;
+              Device: {seasonalResult.device}
+            </div>
+          </section>
+        )}
+
         {/* ══════════════════════════════════════════════════════════════
             3. FORECAST SECTION (MONTH SELECTOR + SST MAP + METRIC)
         ══════════════════════════════════════════════════════════════ */}
-        <section className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
+        <section className="glass rounded-2xl p-6 sm:p-7 border border-cyan-500/30 depth-shadow space-y-6">
           
           {/* Header & Month Selector */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <Thermometer className="text-[#005088]" size={24} />
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                <Thermometer className="text-cyan-400" size={24} />
                 <span>3-Month Forecast</span>
               </h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                Predicted Sea Surface Temperature (SST) field across North Indian Ocean
+              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                Production FNO forecast field across the North Indian Ocean
               </p>
             </div>
 
             {/* Clean Month Selector Buttons */}
-            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-white/10">
               {forecastMonths.map((m) => (
                 <button
                   key={m.monthIndex}
                   onClick={() => setSelectedMonthIndex(m.monthIndex)}
                   className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     selectedMonthIndex === m.monthIndex
-                      ? 'bg-[#005088] text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      ? 'bg-cyan-500/25 border border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.25)]'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                 >
                   <Calendar size={13} />
@@ -447,16 +713,16 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
             
             {/* SST Map Representation (8 cols) */}
             <div className="lg:col-span-8 space-y-2.5">
-              <div className="relative bg-slate-50 rounded-xl border border-slate-200 overflow-hidden shadow-inner p-3">
+              <div className="relative bg-slate-950/80 rounded-xl border border-cyan-500/20 overflow-hidden shadow-inner p-3">
                 
                 {/* Geographic & Domain Header Labels */}
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 mb-2 px-1">
-                  <span className="font-semibold">North Indian Ocean (5°N–30°N, 45°E–105°E)</span>
-                  <span className="text-[#005088] font-bold">{activeMonth.monthName}</span>
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-300 mb-2 px-1">
+                  <span className="font-semibold text-slate-300">North Indian Ocean (5°N–30°N, 45°E–105°E)</span>
+                  <span className="text-cyan-300 font-bold">{activeMonth.monthName}</span>
                 </div>
 
                 {/* Heatmap Canvas */}
-                <div className="relative aspect-[60/26] w-full rounded-lg overflow-hidden border border-slate-300 bg-slate-200">
+                <div className="relative aspect-[60/26] w-full rounded-lg overflow-hidden border border-white/15 bg-slate-900">
                   <canvas
                     ref={sstCanvasRef}
                     width={COLS}
@@ -467,32 +733,43 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
                     style={{ imageRendering: 'pixelated' }}
                   />
 
+                  {/* Empty-state overlay */}
+                  {!seasonalResult && !isGenerating && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-[2px]">
+                      <div className="px-5 py-3.5 rounded-xl bg-slate-900 border border-cyan-500/30 shadow-2xl text-center">
+                        <div className="text-sm font-black text-white">Run the production forecast</div>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          Backend result will populate this map with the real 101 × 241 FNO field.
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {/* Dynamic Hover Tooltip Overlay */}
                   {hoveredCell && (
-                    <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-md border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-mono shadow-md space-y-0.5 pointer-events-none">
-                      <div className="text-slate-500 text-[10px]">
+                    <div className="absolute top-2 right-2 bg-slate-950/95 backdrop-blur-md border border-cyan-500/40 px-3 py-1.5 rounded-lg text-xs font-mono shadow-2xl space-y-0.5 pointer-events-none">
+                      <div className="text-slate-400 text-[10px]">
                         {hoveredCell.lat}°N, {hoveredCell.lon}°E
                       </div>
-                      <div className="text-slate-800 font-bold">
-                        SST: <span className="text-red-700 text-sm font-mono">{hoveredCell.sst.toFixed(2)}°C</span>
+                      <div className="text-white font-bold">
+                        SST: <span className="text-rose-400 text-sm font-mono">{Number.isFinite(hoveredCell.sst) ? hoveredCell.sst.toFixed(3) : '--'}</span>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Lat/Lon axis indicators & Legend */}
-                <div className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-slate-600 pt-1">
+                <div className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-slate-300 pt-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-500 font-semibold">Scale (°C):</span>
+                    <span className="text-[11px] text-slate-400 font-semibold">Relative normalized SST</span>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-blue-700 font-bold">24°C</span>
-                      <div className="w-28 h-2.5 rounded-full bg-gradient-to-r from-blue-600 via-teal-400 via-amber-400 to-red-600 border border-slate-300" />
-                      <span className="text-[10px] text-red-700 font-bold">32°C</span>
+                      <span className="text-[10px] text-cyan-400 font-bold">Low</span>
+                      <div className="w-28 h-2.5 rounded-full bg-gradient-to-r from-blue-600 via-teal-400 via-amber-400 to-red-600 border border-white/20" />
+                      <span className="text-[10px] text-rose-400 font-bold">High</span>
                     </div>
                   </div>
 
-                  <span className="text-[10px] text-slate-500">
-                    Grey = Land Mask &bull; Hover over cells to inspect
+                  <span className="text-[10px] text-slate-400">
+                    Normalized backend field &bull; Hover over cells to inspect
                   </span>
                 </div>
               </div>
@@ -500,36 +777,36 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
 
             {/* Beside Map: Predicted SST Metric Card (4 cols) */}
             <div className="lg:col-span-4 space-y-4">
-              <div className="p-6 rounded-xl bg-blue-50/60 border border-blue-200 shadow-xs text-center space-y-3">
-                <span className="text-xs font-mono font-black text-[#005088] uppercase tracking-wider block">
-                  Predicted Mean SST
+              <div className="p-6 rounded-xl bg-cyan-950/30 border border-cyan-500/30 shadow-xs text-center space-y-3">
+                <span className="text-xs font-mono font-black text-cyan-300 uppercase tracking-wider block">
+                  Predicted SST (normalized)
                 </span>
 
-                <div className="text-5xl sm:text-6xl font-black text-slate-900 tracking-tight font-mono">
-                  {activeMonth.meanSST.toFixed(1)}<span className="text-2xl sm:text-3xl text-[#005088] font-sans">°C</span>
+                <div className="text-5xl sm:text-6xl font-black text-white tracking-tight font-mono">
+                  {activeMonth.meanSST == null ? '--' : activeMonth.meanSST.toFixed(3)}<span className="text-sm sm:text-base text-cyan-300 font-sans"> norm.</span>
                 </div>
 
-                <div className="inline-block px-3 py-1 rounded-full bg-white border border-blue-200 text-xs font-bold text-[#005088]">
+                <div className="inline-block px-3 py-1 rounded-full bg-slate-900/80 border border-cyan-500/30 text-xs font-bold text-cyan-300">
                   Target: {activeMonth.monthName}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-blue-200 text-xs font-mono">
-                  <div className="p-2 rounded-lg bg-white border border-slate-200">
-                    <span className="text-[10px] text-slate-500 block">Min Basin</span>
-                    <span className="text-blue-700 font-bold">{activeMonth.minSST}°C</span>
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-cyan-500/20 text-xs font-mono">
+                  <div className="p-2 rounded-lg bg-slate-950/70 border border-white/10">
+                    <span className="text-[10px] text-slate-400 block">Minimum</span>
+                    <span className="text-cyan-400 font-bold">{activeMonth.minSST == null ? '--' : activeMonth.minSST.toFixed(3)}</span>
                   </div>
-                  <div className="p-2 rounded-lg bg-white border border-slate-200">
-                    <span className="text-[10px] text-slate-500 block">Peak Warm Pool</span>
-                    <span className="text-red-700 font-bold">{activeMonth.maxSST}°C</span>
+                  <div className="p-2 rounded-lg bg-slate-950/70 border border-white/10">
+                    <span className="text-[10px] text-slate-400 block">Maximum</span>
+                    <span className="text-rose-400 font-bold">{activeMonth.maxSST == null ? '--' : activeMonth.maxSST.toFixed(3)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Real Backend Hook Note */}
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
-                <Info size={14} className="text-[#005088] shrink-0 mt-0.5" />
+              <div className="p-3 rounded-xl bg-slate-950/70 border border-white/10 text-[11px] text-slate-300 flex items-start gap-2">
+                <Info size={14} className="text-cyan-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Developer Hook:</strong> Gridded tensor data feeds from Spatiotemporal FNO inference output (<code className="text-[#005088] text-[10px] font-bold">shape: [3, 101, 241]</code>).
+                  <strong className="text-white">Production backend:</strong> Real Spatiotemporal FNO response, output shape <code className="text-cyan-300 text-[10px] font-bold">[3, 1, 101, 241]</code>. Physical Celsius reconstruction is intentionally not shown because the backend marks it as unverified.
                 </span>
               </div>
             </div>
@@ -540,26 +817,26 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
         {/* ══════════════════════════════════════════════════════════════
             4. ANOMALY SECTION (FORMULA + ANOMALY MAP)
         ══════════════════════════════════════════════════════════════ */}
-        <section className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
+        <section className="glass rounded-2xl p-6 sm:p-7 border border-cyan-500/30 depth-shadow space-y-6">
           
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <Activity className="text-amber-700" size={24} />
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                <Activity className="text-amber-400" size={24} />
                 <span>SST Anomaly</span>
               </h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                Shows how the predicted temperature differs from the normal temperature for that month.
+              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                Shows the production FNO anomaly field relative to the model's train-only monthly climatology.
               </p>
             </div>
 
             {/* Compact Formula Visual Box */}
-            <div className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-300 flex items-center gap-2.5 text-xs font-mono shadow-xs">
-              <span className="text-[#005088] font-bold">Predicted SST</span>
-              <span className="text-amber-800 font-black">−</span>
-              <span className="text-slate-700 font-bold">Monthly Climatology</span>
-              <span className="text-amber-800 font-black">=</span>
-              <span className="text-rose-700 font-black">SST Anomaly</span>
+            <div className="px-4 py-2.5 rounded-xl bg-slate-950/80 border border-amber-500/30 flex items-center gap-2.5 text-xs font-mono shadow-xs text-white">
+              <span className="text-cyan-300 font-bold">Predicted normalized SST</span>
+              <span className="text-amber-400 font-black">−</span>
+              <span className="text-slate-300 font-bold">Monthly Climatology</span>
+              <span className="text-amber-400 font-black">=</span>
+              <span className="text-rose-400 font-black">SST Anomaly</span>
             </div>
           </div>
 
@@ -568,15 +845,15 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
             
             {/* Anomaly Map (8 cols) */}
             <div className="lg:col-span-8 space-y-2.5">
-              <div className="relative bg-slate-50 rounded-xl border border-slate-200 overflow-hidden shadow-inner p-3">
+              <div className="relative bg-slate-950/80 rounded-xl border border-cyan-500/20 overflow-hidden shadow-inner p-3">
                 
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 mb-2 px-1">
-                  <span className="font-semibold">Temperature Deviation Field</span>
-                  <span className="text-amber-800 font-bold">Lead: {activeMonth.leadTimeLabel}</span>
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-300 mb-2 px-1">
+                  <span className="font-semibold text-slate-300">Temperature Deviation Field</span>
+                  <span className="text-amber-400 font-bold">Lead: {activeMonth.leadTimeLabel}</span>
                 </div>
 
                 {/* Canvas Anomaly Heatmap */}
-                <div className="relative aspect-[60/26] w-full rounded-lg overflow-hidden border border-slate-300 bg-slate-200">
+                <div className="relative aspect-[60/26] w-full rounded-lg overflow-hidden border border-white/15 bg-slate-900">
                   <canvas
                     ref={anomCanvasRef}
                     width={COLS}
@@ -587,16 +864,27 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
                     style={{ imageRendering: 'pixelated' }}
                   />
 
+                  {!seasonalResult && !isGenerating && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-[2px]">
+                      <div className="px-5 py-3.5 rounded-xl bg-slate-900 border border-cyan-500/30 shadow-2xl text-center">
+                        <div className="text-sm font-black text-white">Awaiting production anomaly field</div>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          Run the backend FNO to populate the real forecast anomaly.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Hover Anomaly Tooltip */}
                   {hoveredCell && (
-                    <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-md border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-mono shadow-md space-y-0.5 pointer-events-none">
-                      <div className="text-slate-500 text-[10px]">
+                    <div className="absolute top-2 right-2 bg-slate-950/95 backdrop-blur-md border border-cyan-500/40 px-3 py-1.5 rounded-lg text-xs font-mono shadow-2xl space-y-0.5 pointer-events-none">
+                      <div className="text-slate-400 text-[10px]">
                         {hoveredCell.lat}°N, {hoveredCell.lon}°E
                       </div>
-                      <div className="font-bold text-slate-800">
+                      <div className="font-bold text-white">
                         Anomaly:{' '}
-                        <span className={hoveredCell.anomaly > 0 ? 'text-red-700 text-sm font-mono' : 'text-blue-700 text-sm font-mono'}>
-                          {hoveredCell.anomaly > 0 ? `+${hoveredCell.anomaly.toFixed(2)}` : hoveredCell.anomaly.toFixed(2)}°C
+                        <span className={hoveredCell.anomaly > 0 ? 'text-rose-400 text-sm font-mono' : 'text-cyan-400 text-sm font-mono'}>
+                          {Number.isFinite(hoveredCell.anomaly) ? `${hoveredCell.anomaly >= 0 ? '+' : ''}${hoveredCell.anomaly.toFixed(3)}` : '--'}
                         </span>
                       </div>
                     </div>
@@ -604,15 +892,15 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
                 </div>
 
                 {/* Diverging Scale Legend: Cooler <- Normal -> Warmer */}
-                <div className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-slate-700 pt-1">
+                <div className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-slate-300 pt-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-blue-700 font-bold">Cooler (-1.5°C)</span>
-                    <div className="w-32 h-2.5 rounded-full bg-gradient-to-r from-blue-600 via-white to-red-600 border border-slate-300" />
-                    <span className="text-[11px] text-red-700 font-bold">Warmer (+1.5°C)</span>
+                    <span className="text-[11px] text-cyan-400 font-bold">Negative</span>
+                    <div className="w-32 h-2.5 rounded-full bg-gradient-to-r from-blue-600 via-white to-red-600 border border-white/20" />
+                    <span className="text-[11px] text-rose-400 font-bold">Positive</span>
                   </div>
 
-                  <span className="text-[11px] font-semibold text-slate-500">
-                    Baseline: 30-Year Monthly Climatology
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    Baseline: train-only monthly climatology
                   </span>
                 </div>
 
@@ -621,27 +909,27 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
 
             {/* Beside Anomaly Map: Summary Card (4 cols) */}
             <div className="lg:col-span-4 space-y-3">
-              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                <span className="text-xs font-mono font-bold text-slate-600 uppercase tracking-wider block">
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-white/10 space-y-3">
+                <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider block">
                   Regional Anomaly Diagnostics
                 </span>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-600 font-medium">Mean Anomaly:</span>
-                  <span className="text-xl font-mono font-black text-rose-700">
-                    +{activeMonth.meanAnomaly.toFixed(2)}°C
+                  <span className="text-xs text-slate-300 font-medium">Mean anomaly (normalized):</span>
+                  <span className="text-xl font-mono font-black text-rose-400">
+                    {activeMonth.meanAnomaly == null ? '--' : `${activeMonth.meanAnomaly >= 0 ? '+' : ''}${activeMonth.meanAnomaly.toFixed(3)}`}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                  <span className="text-xs text-slate-600 font-medium">Thermal Phase:</span>
+                <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                  <span className="text-xs text-slate-300 font-medium">Thermal Phase:</span>
                   <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${activeMonth.anomalyStatusColor}`}>
                     {activeMonth.anomalyStatus}
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
-                  Positive anomalies over +0.5°C signal elevated risk of Marine Heatwaves (MHW) and intensified cyclogenesis energy in the Bay of Bengal &amp; Arabian Sea.
+                <div className="pt-2 border-t border-white/10 text-[11px] text-slate-400 leading-relaxed">
+                  Positive and negative anomaly values are reported in the backend's normalized model space. This page does not convert them into physical °C thresholds.
                 </div>
               </div>
             </div>
@@ -654,8 +942,8 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
         ══════════════════════════════════════════════════════════════ */}
         <section className="space-y-4">
           <div className="flex items-center gap-2">
-            <Compass size={18} className="text-[#005088]" />
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+            <Compass size={18} className="text-cyan-400" />
+            <h2 className="text-lg font-black text-white tracking-tight">
               How It Works &bull; 4-Step Scientific Pipeline
             </h2>
           </div>
@@ -663,45 +951,45 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             
             {/* Card 01 */}
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-blue-300 transition-colors">
-              <span className="text-xs font-mono font-black text-[#005088] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+            <div className="p-4 rounded-xl glass border border-white/10 space-y-2 hover:border-cyan-500/40 transition-colors">
+              <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
                 01
               </span>
-              <h4 className="font-bold text-slate-900 text-sm">Historical Data</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">
+              <h4 className="font-bold text-white text-sm">Historical Data</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Ingests past 12 consecutive months of multi-satellite surface observations (SST, SSS, SLA, Winds, Currents).
               </p>
             </div>
 
             {/* Card 02 */}
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-blue-300 transition-colors">
-              <span className="text-xs font-mono font-black text-[#005088] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+            <div className="p-4 rounded-xl glass border border-white/10 space-y-2 hover:border-cyan-500/40 transition-colors">
+              <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
                 02
               </span>
-              <h4 className="font-bold text-slate-900 text-sm">OceanEmbed Subsurface</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">
+              <h4 className="font-bold text-white text-sm">OceanEmbed Subsurface</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Reconstructs 15 vertical thermal layers (0–1000m) to capture subsurface oceanic heat content and thermal memory.
               </p>
             </div>
 
             {/* Card 03 */}
-            <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-200 shadow-xs space-y-2">
-              <span className="text-xs font-mono font-black text-white bg-[#005088] px-2 py-0.5 rounded">
+            <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2">
+              <span className="text-xs font-mono font-black text-white bg-cyan-600 px-2 py-0.5 rounded">
                 03
               </span>
-              <h4 className="font-bold text-[#005088] text-sm">Spatiotemporal FNO</h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <h4 className="font-bold text-cyan-300 text-sm">Spatiotemporal FNO</h4>
+              <p className="text-xs text-cyan-100/90 leading-relaxed">
                 Fourier Neural Operator learns continuous multi-scale temporal and spatial dynamical operators across the North Indian Ocean.
               </p>
             </div>
 
             {/* Card 04 */}
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-amber-300 transition-colors">
-              <span className="text-xs font-mono font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+            <div className="p-4 rounded-xl glass border border-white/10 space-y-2 hover:border-amber-500/40 transition-colors">
+              <span className="text-xs font-mono font-black text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30">
                 04
               </span>
-              <h4 className="font-bold text-slate-900 text-sm">3-Month Forecast &amp; Anomaly</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">
+              <h4 className="font-bold text-white text-sm">3-Month Forecast &amp; Anomaly</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Outputs forward 3-month SST projections and compares with historical monthly climatology to isolate thermal anomalies.
               </p>
             </div>
@@ -716,7 +1004,7 @@ export default function SeasonalPredictionPage({ embedded = false }: { embedded?
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans flex flex-col selection:bg-blue-100 selection:text-[#005088]">
+    <div className="min-h-screen bg-[#020b18] text-white font-sans flex flex-col selection:bg-cyan-500/30 selection:text-cyan-300">
       <Navbar />
       <main className="flex-1 w-full">
         {mainContent}

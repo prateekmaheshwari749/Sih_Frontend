@@ -1,8 +1,6 @@
-import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function GovFooter({ className = 'mt-12' }: { className?: string }) {
-  const navigate = useNavigate();
   const { language } = useTheme();
   const isHi = language === 'hi';
 
@@ -31,11 +29,11 @@ export default function GovFooter({ className = 'mt-12' }: { className?: string 
               {isHi ? 'महासागरीय सेवाएं' : 'Ocean Services'}
             </h5>
             <ul className="space-y-1.5 text-slate-600">
-              <li><button onClick={() => navigate('/dashboard')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'परिचालन डैशबोर्ड' : 'Ocean Telemetry Dashboard'}</button></li>
-              <li><button onClick={() => navigate('/map')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? '3D आयामी क्यूब' : '3D Volumetric Cube'}</button></li>
-              <li><button onClick={() => navigate('/cyclone')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'चक्रवात ऊष्मा ईंधन व कोल्ड वेक' : 'Cyclone Fuel & Cold Wake'}</button></li>
-              <li><button onClick={() => navigate('/forecast')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? '7-दिवसीय पूर्वानुमान' : '7-Day Subsurface Forecast'}</button></li>
-              <li><button onClick={() => navigate('/validation')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'आर्गो फ्लोट सत्यापन' : 'ARGO Float Validation'}</button></li>
+              <li><span>{isHi ? 'परिचालन डैशबोर्ड' : 'Ocean Telemetry Dashboard'}</span></li>
+              <li><span>{isHi ? '3D आयामी क्यूब' : '3D Volumetric Cube'}</span></li>
+              <li><span>{isHi ? 'चक्रवात ऊष्मा ईंधन व कोल्ड वेक' : 'Cyclone Fuel & Cold Wake'}</span></li>
+              <li><span>{isHi ? '7-दिवसीय पूर्वानुमान' : '7-Day Subsurface Forecast'}</span></li>
+              <li><span>{isHi ? 'आर्गो फ्लोट सत्यापन' : 'ARGO Float Validation'}</span></li>
             </ul>
           </div>
 
@@ -44,11 +42,11 @@ export default function GovFooter({ className = 'mt-12' }: { className?: string 
               {isHi ? 'सरकारी पोर्टल व लिंक' : 'Government Portals'}
             </h5>
             <ul className="space-y-1.5 text-slate-600">
-              <li><a href="https://moes.gov.in" target="_blank" rel="noreferrer" className="text-slate-600 hover:text-[#005088] hover:underline transition-colors">Ministry of Earth Sciences (MoES)</a></li>
-              <li><a href="https://incois.gov.in" target="_blank" rel="noreferrer" className="text-slate-600 hover:text-[#005088] hover:underline transition-colors">INCOIS Portal</a></li>
-              <li><a href="https://mausam.imd.gov.in" target="_blank" rel="noreferrer" className="text-slate-600 hover:text-[#005088] hover:underline transition-colors">India Meteorological Department (IMD)</a></li>
-              <li><a href="https://ndma.gov.in" target="_blank" rel="noreferrer" className="text-slate-600 hover:text-[#005088] hover:underline transition-colors">NDMA Portal (ndma.gov.in)</a></li>
-              <li><a href="https://digitalindia.gov.in" target="_blank" rel="noreferrer" className="text-slate-600 hover:text-[#005088] hover:underline transition-colors">Digital India</a></li>
+              <li><span>Ministry of Earth Sciences (MoES)</span></li>
+              <li><span>INCOIS Portal</span></li>
+              <li><span>India Meteorological Department (IMD)</span></li>
+              <li><span>NDMA Portal (ndma.gov.in)</span></li>
+              <li><span>Digital India</span></li>
             </ul>
           </div>
 
@@ -57,11 +55,11 @@ export default function GovFooter({ className = 'mt-12' }: { className?: string 
               {isHi ? 'वेबसाइट नीतियां' : 'Website Policies'}
             </h5>
             <ul className="space-y-1.5 text-slate-600">
-              <li><button onClick={() => navigate('/docs')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'कॉपीराइट नीति' : 'Copyright Policy'}</button></li>
-              <li><button onClick={() => navigate('/docs')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'गोपनीयता नीति' : 'Privacy Policy'}</button></li>
-              <li><button onClick={() => navigate('/docs')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'उपयोग की शर्तें' : 'Terms of Use'}</button></li>
-              <li><button onClick={() => navigate('/docs')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'अभिगम्यता वक्तव्य' : 'Accessibility Statement'}</button></li>
-              <li><button onClick={() => navigate('/docs')} className="text-slate-600 hover:text-[#005088] hover:underline transition-colors cursor-pointer text-left">{isHi ? 'हाइपरलिंकिंग नीति' : 'Hyperlinking Policy'}</button></li>
+              <li><span>{isHi ? 'कॉपीराइट नीति' : 'Copyright Policy'}</span></li>
+              <li><span>{isHi ? 'गोपनीयता नीति' : 'Privacy Policy'}</span></li>
+              <li><span>{isHi ? 'उपयोग की शर्तें' : 'Terms of Use'}</span></li>
+              <li><span>{isHi ? 'अभिगम्यता वक्तव्य' : 'Accessibility Statement'}</span></li>
+              <li><span>{isHi ? 'हाइपरलिंकिंग नीति' : 'Hyperlinking Policy'}</span></li>
             </ul>
           </div>
 

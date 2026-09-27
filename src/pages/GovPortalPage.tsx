@@ -271,7 +271,7 @@ export default function GovPortalPage() {
           icon={
             <Shield
               size={18}
-              className="text-yellow-400"
+              className="text-amber-500"
             />
           }
         />
@@ -282,13 +282,14 @@ export default function GovPortalPage() {
 
         <div className="flex flex-wrap items-center gap-3 mb-6">
 
-          <div className="px-4 py-2 rounded-xl border border-yellow-500/25 bg-yellow-500/10 text-yellow-300 text-sm">
+          <div className="px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 font-bold text-xs sm:text-sm shadow-xs flex items-center gap-1.5">
+            <Shield size={14} className="text-amber-600" />
             Government Officer Access
           </div>
 
-          <div className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-white/60 text-sm">
-            Production API:{' '}
-            <span className="text-white">
+          <div className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm shadow-xs flex items-center">
+            <span>Production API:</span>
+            <span className="text-[#005088] font-mono font-bold ml-1.5">
               {getGovernmentApiBase()}
             </span>
           </div>
@@ -301,7 +302,7 @@ export default function GovPortalPage() {
               loadingAudit ||
               loadingOperations
             }
-            className="ml-auto px-4 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-sm flex items-center gap-2 disabled:opacity-50"
+            className="ml-auto px-4 py-2 rounded-xl border border-cyan-300 hover:border-cyan-500 bg-white hover:bg-cyan-50 text-[#005088] font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw
               size={14}
@@ -322,31 +323,31 @@ export default function GovPortalPage() {
         {/* API STATUS */}
         {/* ------------------------------------------------ */}
 
-        <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)]">
 
           <div className="flex flex-wrap items-center gap-3">
 
             <span
-              className={`w-3 h-3 rounded-full ${
+              className={`w-3.5 h-3.5 rounded-full ${
                 apiOnline === true
-                  ? 'bg-green-400'
+                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                   : apiOnline === false
-                    ? 'bg-red-400'
-                    : 'bg-yellow-400'
+                    ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                    : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
               }`}
             />
 
-            <span className="font-mono text-sm text-white/80">
+            <span className="font-bold text-sm text-slate-900">
               Government Intelligence API:
             </span>
 
             <span
-              className={`font-mono text-sm font-semibold ${
+              className={`font-mono text-xs font-bold px-3 py-1 rounded-full border shadow-xs ${
                 apiOnline === true
-                  ? 'text-green-400'
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
                   : apiOnline === false
-                    ? 'text-red-400'
-                    : 'text-yellow-400'
+                    ? 'border-rose-300 bg-rose-50 text-rose-800'
+                    : 'border-amber-300 bg-amber-50 text-amber-800'
               }`}
             >
               {apiChecking
@@ -357,16 +358,18 @@ export default function GovPortalPage() {
             </span>
 
             {apiStatus?.request_id && (
-              <span className="text-xs text-white/30 ml-auto font-mono">
+              <span className="text-xs text-slate-700 font-mono font-bold bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 ml-auto">
                 request {apiStatus.request_id}
               </span>
             )}
           </div>
 
           {apiStatus?.timestamp && (
-            <p className="text-xs text-white/35 mt-2">
-              Last API response:{' '}
-              {formatTimestamp(apiStatus.timestamp)}
+            <p className="text-xs text-slate-600 mt-2.5 flex items-center gap-1.5">
+              <span>Last API response:</span>
+              <span className="text-slate-900 font-bold font-mono">
+                {formatTimestamp(apiStatus.timestamp)}
+              </span>
             </p>
           )}
         </div>
@@ -376,21 +379,21 @@ export default function GovPortalPage() {
         {/* ------------------------------------------------ */}
 
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+          <div className="mb-6 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 shadow-sm">
 
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2.5">
 
               <AlertTriangle
-                size={16}
-                className="shrink-0 mt-0.5"
+                size={18}
+                className="shrink-0 mt-0.5 text-rose-600"
               />
 
               <div>
-                <p className="font-semibold">
+                <p className="font-bold text-rose-900">
                   Government API request issue
                 </p>
 
-                <p className="mt-1 text-red-300/70">
+                <p className="mt-1 text-rose-700 text-xs sm:text-sm font-medium">
                   {error}
                 </p>
               </div>
@@ -403,16 +406,16 @@ export default function GovPortalPage() {
         {/* DATE */}
         {/* ------------------------------------------------ */}
 
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="mb-6 flex flex-wrap items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)]">
 
           <Calendar
-            size={16}
-            className="text-cyan-400"
+            size={18}
+            className="text-[#005088]"
           />
 
           <label
             htmlFor="government-date"
-            className="text-sm text-white/60"
+            className="text-sm font-bold text-slate-900"
           >
             Operational date
           </label>
@@ -426,12 +429,11 @@ export default function GovPortalPage() {
             onChange={(event) =>
               setSelectedDate(event.target.value)
             }
-            className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+            className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 font-mono font-bold shadow-xs outline-none focus:border-[#005088] focus:ring-2 focus:ring-cyan-500/20"
           />
 
-          <span className="text-xs text-white/35">
-            Data is requested directly from the FastAPI
-            Government Intelligence API.
+          <span className="text-xs font-medium text-slate-500">
+            Data is requested directly from the FastAPI Government Intelligence API.
           </span>
         </div>
 
@@ -441,66 +443,62 @@ export default function GovPortalPage() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+          <div className="rounded-2xl border border-rose-200 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] hover:shadow-md transition-all">
 
-            <Bell
-              size={18}
-              className="text-red-400 mb-3"
-            />
+            <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 mb-3 shadow-xs">
+              <Bell size={18} />
+            </div>
 
-            <p className="text-3xl font-black text-white">
+            <p className="text-3xl sm:text-4xl font-black text-rose-600 tracking-tight">
               {activeAlerts.length}
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mt-1.5">
               Active API Alerts
             </p>
           </div>
 
-          <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5">
+          <div className="rounded-2xl border border-amber-200 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] hover:shadow-md transition-all">
 
-            <AlertTriangle
-              size={18}
-              className="text-orange-400 mb-3"
-            />
+            <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-3 shadow-xs">
+              <AlertTriangle size={18} />
+            </div>
 
-            <p className="text-3xl font-black text-white">
+            <p className="text-3xl sm:text-4xl font-black text-amber-600 tracking-tight">
               {highPriorityAlerts.length}
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mt-1.5">
               High/Critical Alerts
             </p>
           </div>
 
-          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+          <div className="rounded-2xl border border-cyan-200 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] hover:shadow-md transition-all">
 
-            <FileText
-              size={18}
-              className="text-cyan-400 mb-3"
-            />
+            <div className="w-10 h-10 rounded-xl bg-cyan-50 border border-cyan-200 flex items-center justify-center text-[#005088] mb-3 shadow-xs">
+              <FileText size={18} />
+            </div>
 
-            <p className="text-3xl font-black text-white">
+            <p className="text-3xl sm:text-4xl font-black text-[#005088] tracking-tight">
               {auditRecords.length}
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mt-1.5">
               Backend Audit Records
             </p>
           </div>
 
-          <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-5">
+          <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] hover:shadow-md transition-all">
 
-            <Server
-              size={18}
-              className="text-green-400 mb-3"
-            />
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mb-3 shadow-xs">
+              <Server size={18} />
+            </div>
 
-            <p className="text-3xl font-black text-white">
+            <p className="text-3xl sm:text-4xl font-black text-emerald-600 tracking-tight">
               {apiOnline === true ? 'OK' : '—'}
             </p>
 
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mt-1.5">
               Government API
             </p>
           </div>
@@ -510,7 +508,7 @@ export default function GovPortalPage() {
         {/* TABS */}
         {/* ------------------------------------------------ */}
 
-        <div className="flex gap-1 p-1 rounded-xl border border-white/10 bg-white/5 mb-6 w-fit">
+        <div className="flex gap-1.5 p-1.5 rounded-2xl border border-slate-200 bg-slate-100 mb-6 w-fit shadow-xs">
 
           {[
             {
@@ -534,13 +532,13 @@ export default function GovPortalPage() {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                   activeTab === id
-                    ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/25'
-                    : 'text-white/50 hover:text-white hover:bg-white/5'
+                    ? 'bg-white text-[#005088] border border-slate-200 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <Icon size={14} />
+                <Icon size={15} />
                 {label}
               </button>
             )
@@ -552,58 +550,57 @@ export default function GovPortalPage() {
         {/* ================================================= */}
 
         {activeTab === 'alerts' && (
-          <section className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+          <section className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.06)] overflow-hidden">
 
-            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+            <div className="px-6 py-4.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
 
               <div>
-                <h2 className="font-semibold text-white flex items-center gap-2">
+                <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
                   <Bell
-                    size={16}
-                    className="text-red-400"
+                    size={17}
+                    className="text-rose-600"
                   />
                   Government Alert Feed
                 </h2>
 
-                <p className="text-xs text-white/40 mt-1">
-                  Real response from{' '}
-                  /api/government/alerts/{selectedDate}
+                <p className="text-xs font-mono text-slate-500 mt-1">
+                  Real response from /api/government/alerts/{selectedDate}
                 </p>
               </div>
 
-              <span className="text-xs text-white/40">
+              <span className="text-xs font-mono font-bold text-[#005088] bg-cyan-50 border border-cyan-200 px-3 py-1 rounded-full shadow-xs">
                 {alerts.length} API record(s)
               </span>
             </div>
 
             {loadingOperations ? (
-              <div className="p-10 text-center text-white/40">
+              <div className="p-12 text-center text-slate-600">
 
                 <RefreshCw
-                  size={20}
-                  className="animate-spin mx-auto mb-3"
+                  size={24}
+                  className="animate-spin mx-auto mb-3 text-[#005088]"
                 />
 
-                Loading government alerts...
+                <span className="font-semibold text-sm">Loading government alerts...</span>
               </div>
             ) : alerts.length === 0 ? (
-              <div className="p-10 text-center">
+              <div className="p-12 text-center">
 
                 <CheckCircle2
-                  size={30}
-                  className="text-green-400 mx-auto mb-3"
+                  size={36}
+                  className="text-emerald-500 mx-auto mb-3"
                 />
 
-                <p className="text-white/60">
+                <p className="text-base font-bold text-slate-900">
                   No alerts returned by the API.
                 </p>
 
-                <p className="text-xs text-white/30 mt-1">
+                <p className="text-xs text-slate-500 mt-1.5">
                   This is the actual API result.
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-white/5">
+              <div className="divide-y divide-slate-100">
 
                 {alerts.map((alert, index) => {
 
@@ -619,6 +616,12 @@ export default function GovPortalPage() {
                         'ACTIVE'
                     );
 
+                  const isHighPriority = [
+                    'CRITICAL',
+                    'SEVERE',
+                    'HIGH',
+                  ].includes(severity.toUpperCase());
+
                   return (
                     <div
                       key={
@@ -626,76 +629,81 @@ export default function GovPortalPage() {
                         alert.alert_id ??
                         index
                       }
-                      className="p-6"
+                      className="p-6 hover:bg-slate-50/50 transition-colors"
                     >
 
-                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <div className="flex flex-wrap items-center gap-2.5 mb-3">
 
-                        <span className="px-2 py-1 rounded-full border border-red-500/25 bg-red-500/10 text-red-300 text-xs">
+                        <span
+                          className={`px-3 py-1 rounded-full border text-xs font-bold font-mono shadow-xs ${
+                            isHighPriority
+                              ? 'border-rose-300 bg-rose-50 text-rose-700'
+                              : 'border-amber-300 bg-amber-50 text-amber-800'
+                          }`}
+                        >
                           {severity}
                         </span>
 
-                        <span className="px-2 py-1 rounded-full border border-white/10 bg-white/5 text-white/60 text-xs">
+                        <span className="px-3 py-1 rounded-full border border-slate-200 bg-slate-100 text-slate-700 font-bold font-mono text-xs">
                           {status}
                         </span>
 
                         {alert.source && (
-                          <span className="text-xs text-white/30">
-                            Source:{' '}
-                            {String(alert.source)}
+                          <span className="text-xs text-slate-700 font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 font-mono">
+                            Source: {String(alert.source)}
                           </span>
                         )}
                       </div>
 
-                      <p className="text-sm text-white/80 leading-relaxed">
+                      <p className="text-sm font-semibold text-slate-900 leading-relaxed">
                         {alert.message ??
                           `Government alert returned for ${selectedDate}.`}
                       </p>
 
-                      <div className="flex flex-wrap gap-4 mt-4 text-xs text-white/40">
+                      <div className="flex flex-wrap gap-3 mt-4 text-xs">
 
                         {alert.event_cells !==
                           undefined && (
-                          <span>
-                            Event cells:{' '}
-                            {String(
-                              alert.event_cells
-                            )}
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                            <span className="text-slate-500 font-semibold">Event cells:</span>
+                            <span className="text-cyan-800 font-black font-mono text-sm">
+                              {String(alert.event_cells)}
+                            </span>
+                          </div>
                         )}
 
                         {alert.forecast_days !==
                           undefined && (
-                          <span>
-                            Forecast days:{' '}
-                            {String(
-                              alert.forecast_days
-                            )}
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                            <span className="text-slate-500 font-semibold">Forecast days:</span>
+                            <span className="text-amber-800 font-black font-mono text-sm">
+                              {String(alert.forecast_days)}
+                            </span>
+                          </div>
                         )}
 
                         {alert.peak_day && (
-                          <span>
-                            Peak day:{' '}
-                            {String(
-                              alert.peak_day
-                            )}
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                            <span className="text-slate-500 font-semibold">Peak day:</span>
+                            <span className="text-emerald-800 font-black font-mono text-sm">
+                              {String(alert.peak_day)}
+                            </span>
+                          </div>
                         )}
 
                         {(alert.timestamp ||
                           alert.created_at) && (
-                          <span className="flex items-center gap-1">
-
-                            <Clock size={12} />
-
-                            {formatTimestamp(
-                              String(
-                                alert.timestamp ??
-                                  alert.created_at
-                              )
-                            )}
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                            <Clock size={13} className="text-[#005088]" />
+                            <span className="text-slate-900 font-bold font-mono">
+                              {formatTimestamp(
+                                String(
+                                  alert.timestamp ??
+                                    alert.created_at
+                                )
+                              )}
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -711,88 +719,87 @@ export default function GovPortalPage() {
         {/* ================================================= */}
 
         {activeTab === 'report' && (
-          <section className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+          <section className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.06)] overflow-hidden">
 
-            <div className="px-6 py-4 border-b border-white/10">
+            <div className="px-6 py-4.5 border-b border-slate-100 bg-slate-50/70">
 
-              <h2 className="font-semibold text-white flex items-center gap-2">
+              <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
 
                 <FileText
-                  size={16}
-                  className="text-cyan-400"
+                  size={17}
+                  className="text-[#005088]"
                 />
 
                 Daily Government Operational Report
               </h2>
 
-              <p className="text-xs text-white/40 mt-1">
-                Real response from{' '}
-                /api/government/report/{selectedDate}
+              <p className="text-xs font-mono text-slate-500 mt-1">
+                Real response from /api/government/report/{selectedDate}
               </p>
             </div>
 
             {loadingOperations ? (
-              <div className="p-10 text-center text-white/40">
+              <div className="p-12 text-center text-slate-600">
 
                 <RefreshCw
-                  size={20}
-                  className="animate-spin mx-auto mb-3"
+                  size={24}
+                  className="animate-spin mx-auto mb-3 text-[#005088]"
                 />
 
-                Loading report...
+                <span className="font-semibold text-sm">Loading report...</span>
               </div>
             ) : (
               <div className="p-6 space-y-5">
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                  <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs">
 
                     <Activity
-                      size={16}
-                      className="text-cyan-400 mb-2"
+                      size={18}
+                      className="text-emerald-600 mb-2"
                     />
 
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                       Report success
                     </p>
 
-                    <p className="text-lg font-semibold text-white">
+                    <p className="text-xl font-black text-emerald-700 font-mono mt-0.5">
                       {report?.success
                         ? 'YES'
                         : 'NO'}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50/50 p-4 shadow-xs">
 
                     <Database
-                      size={16}
-                      className="text-green-400 mb-2"
+                      size={18}
+                      className="text-[#005088] mb-2"
                     />
 
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                       Request ID
                     </p>
 
-                    <p className="text-sm font-mono text-white break-all">
+                    <p className="text-sm font-mono font-black text-[#005088] break-all mt-0.5">
                       {report?.request_id ??
                         '—'}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 shadow-xs">
 
                     <Clock
-                      size={16}
-                      className="text-yellow-400 mb-2"
+                      size={18}
+                      className="text-amber-600 mb-2"
                     />
 
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                       Generated
                     </p>
 
-                    <p className="text-sm text-white">
+                    <p className="text-sm font-mono font-black text-amber-800 mt-0.5">
                       {formatTimestamp(
                         report?.timestamp
                       )}
@@ -800,7 +807,7 @@ export default function GovPortalPage() {
                   </div>
                 </div>
 
-                <pre className="overflow-auto max-h-[520px] rounded-xl border border-white/10 bg-black/20 p-5 text-xs text-white/70">
+                <pre className="overflow-auto max-h-[520px] rounded-xl border border-slate-200 bg-slate-900 text-cyan-300 p-5 text-xs font-mono leading-relaxed shadow-inner">
                   {JSON.stringify(
                     reportData,
                     null,
@@ -817,38 +824,37 @@ export default function GovPortalPage() {
         {/* ================================================= */}
 
         {activeTab === 'audit' && (
-          <section className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+          <section className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.06)] overflow-hidden">
 
-            <div className="px-6 py-4 border-b border-white/10">
+            <div className="px-6 py-4.5 border-b border-slate-100 bg-slate-50/70">
 
-              <h2 className="font-semibold text-white flex items-center gap-2">
+              <h2 className="font-bold text-base text-slate-900 flex items-center gap-2">
 
                 <FileText
-                  size={16}
-                  className="text-cyan-400"
+                  size={17}
+                  className="text-[#005088]"
                 />
 
                 Backend Audit Log
               </h2>
 
-              <p className="text-xs text-white/40 mt-1">
-                Real records returned by{' '}
-                GET /api/government/audit
+              <p className="text-xs font-mono text-slate-500 mt-1">
+                Real records returned by GET /api/government/audit
               </p>
             </div>
 
             {loadingAudit ? (
-              <div className="p-10 text-center text-white/40">
+              <div className="p-12 text-center text-slate-600">
 
                 <RefreshCw
-                  size={20}
-                  className="animate-spin mx-auto mb-3"
+                  size={24}
+                  className="animate-spin mx-auto mb-3 text-[#005088]"
                 />
 
-                Loading backend audit records...
+                <span className="font-semibold text-sm">Loading backend audit records...</span>
               </div>
             ) : auditRecords.length === 0 ? (
-              <div className="p-10 text-center text-white/40">
+              <div className="p-12 text-center text-slate-600 font-medium">
                 No audit records returned by the backend.
               </div>
             ) : (
@@ -857,25 +863,25 @@ export default function GovPortalPage() {
                 <table className="w-full text-xs">
 
                   <thead>
-                    <tr className="border-b border-white/10">
+                    <tr className="bg-slate-50 border-b border-slate-200">
 
-                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                      <th className="px-4 py-3.5 text-left text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                         Timestamp
                       </th>
 
-                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                      <th className="px-4 py-3.5 text-left text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                         Action
                       </th>
 
-                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                      <th className="px-4 py-3.5 text-left text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                         Endpoint
                       </th>
 
-                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                      <th className="px-4 py-3.5 text-left text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                         Status
                       </th>
 
-                      <th className="px-4 py-3 text-left text-white/40 font-medium">
+                      <th className="px-4 py-3.5 text-left text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                         Request ID
                       </th>
                     </tr>
@@ -892,10 +898,10 @@ export default function GovPortalPage() {
                         ) => (
                           <tr
                             key={`${record.request_id ?? 'record'}-${index}`}
-                            className="border-b border-white/5 hover:bg-white/5"
+                            className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
                           >
 
-                            <td className="px-4 py-3 text-white/60 whitespace-nowrap">
+                            <td className="px-4 py-3 text-slate-800 font-mono font-bold whitespace-nowrap">
                               {formatTimestamp(
                                 record.timestamp
                               )}
@@ -903,13 +909,13 @@ export default function GovPortalPage() {
 
                             <td className="px-4 py-3">
 
-                              <span className="px-2 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+                              <span className="px-2.5 py-1 rounded-full border border-cyan-200 bg-cyan-50 text-[#005088] font-bold font-mono text-[11px] shadow-xs">
                                 {record.action ??
                                   '—'}
                               </span>
                             </td>
 
-                            <td className="px-4 py-3 text-white/50 max-w-[360px] truncate">
+                            <td className="px-4 py-3 text-slate-800 font-mono text-xs font-semibold max-w-[360px] truncate">
                               {record.endpoint ??
                                 '—'}
                             </td>
@@ -917,19 +923,19 @@ export default function GovPortalPage() {
                             <td className="px-4 py-3">
 
                               <span
-                                className={
+                                className={`px-2.5 py-1 rounded-full border font-mono font-bold text-xs shadow-xs ${
                                   record.status_code ===
                                   200
-                                    ? 'text-green-400'
-                                    : 'text-red-400'
-                                }
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                    : 'border-rose-200 bg-rose-50 text-rose-800'
+                                }`}
                               >
                                 {record.status_code ??
                                   '—'}
                               </span>
                             </td>
 
-                            <td className="px-4 py-3 text-white/40 font-mono whitespace-nowrap">
+                            <td className="px-4 py-3 text-[#005088] font-mono font-bold whitespace-nowrap">
                               {record.request_id ??
                                 '—'}
                             </td>
@@ -949,14 +955,14 @@ export default function GovPortalPage() {
         {/* FOOTER */}
         {/* ------------------------------------------------ */}
 
-        <div className="mt-6 flex items-center gap-2 text-xs text-white/30">
+        <div className="mt-6 flex items-center gap-2.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-xs">
 
-          <Activity size={12} />
+          <Activity size={14} className="text-[#005088] shrink-0" />
 
-          This portal reads operational data directly
-          from the FastAPI Government Intelligence API.
-          No synthetic ocean measurements are created
-          by this page.
+          <span>
+            This portal reads operational data directly from the FastAPI Government Intelligence API.
+            No synthetic ocean measurements are created by this page.
+          </span>
 
         </div>
 

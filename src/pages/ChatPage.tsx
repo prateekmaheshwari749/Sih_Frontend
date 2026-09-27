@@ -7,7 +7,6 @@ import {
   Waves,
   RefreshCw,
   Trash2,
-  ChevronDown,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -31,46 +30,38 @@ interface Message {
 }
 
 // ============================================================
-// SUGGESTED QUESTIONS
-// ============================================================
-
-const SUGGESTIONS = [
-  'Show me the current subsurface profile',
-  'What is the Ocean Heat Content (OHC)?',
-  'Explain the Mixed Layer Depth (MLD)',
-  'How does the satellite embedding model work?',
-  'What are the active cyclone alerts?',
-  'Compare SST and SSH anomalies in Bay of Bengal',
-];
-
-// ============================================================
 // SIMPLE MARKDOWN RENDERER
 // ============================================================
 
-function renderContent(text: string, isLight: boolean) {
+function renderContent(text: string, isLight: boolean, isUser = false) {
   return text
     .split('\n')
     .map((line, i, arr) => {
-      // FIXED:
-      // Correctly detect **bold text**
       const parts = line.split(/\*\*(.*?)\*\*/g);
 
       return (
-        <span key={i} className="block min-h-[1.2em]">
+        <span
+          key={i}
+          className="block min-h-[1.2em]"
+          style={{ color: '#0f172a' }}
+        >
           {parts.map((part, j) =>
             j % 2 === 1 ? (
               <strong
                 key={j}
-                className={
-                  isLight
-                    ? 'text-[#005088] font-bold'
-                    : 'text-cyan-300 font-bold'
-                }
+                className="text-[#005088] font-black"
+                style={{ color: '#005088' }}
               >
                 {part}
               </strong>
             ) : (
-              part
+              <span
+                key={j}
+                className={isUser ? 'text-slate-900 font-semibold' : 'text-slate-900 font-medium'}
+                style={{ color: '#0f172a' }}
+              >
+                {part}
+              </span>
             ),
           )}
 
@@ -104,7 +95,6 @@ export default function ChatPage() {
 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(true);
 
   const [backendConnected, setBackendConnected] = useState<boolean | null>(
     null,
@@ -167,8 +157,6 @@ export default function ChatPage() {
     const cleanText = text.trim();
 
     if (!cleanText || isTyping) return;
-
-    setShowSuggestions(false);
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -278,7 +266,6 @@ export default function ChatPage() {
       },
     ]);
 
-    setShowSuggestions(true);
     setBackendError(null);
   };
 
@@ -419,12 +406,8 @@ export default function ChatPage() {
               <div
                 className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
                   msg.role === 'assistant'
-                    ? isLight
-                      ? 'bg-[#005088] text-white'
-                      : 'bg-gradient-to-br from-cyan-400 to-blue-600 text-white'
-                    : isLight
-                      ? 'bg-slate-700 text-white'
-                      : 'bg-gradient-to-br from-purple-500 to-pink-600 text-white'
+                    ? 'bg-[#005088] text-white'
+                    : 'bg-white border-2 border-[#005088] text-[#005088]'
                 }`}
               >
                 {msg.role === 'assistant' ? (
@@ -444,25 +427,25 @@ export default function ChatPage() {
                 }`}
               >
                 <div
-                  className={`rounded-xl px-4 py-3 text-xs sm:text-sm leading-relaxed ${
+                  className={`rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed shadow-sm bg-white border ${
                     msg.role === 'assistant'
-                      ? isLight
-                        ? 'bg-white border border-slate-200 text-slate-800 shadow-xs rounded-tl-xs'
-                        : 'bg-white/5 border border-white/10 text-white/90 rounded-tl-xs'
-                      : isLight
-                        ? 'bg-[#005088] text-white shadow-xs rounded-tr-xs'
-                        : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-tr-xs'
+                      ? 'border-slate-200 text-slate-900 rounded-tl-xs'
+                      : 'border-cyan-500/50 text-slate-900 rounded-tr-xs shadow-md'
                   }`}
+                  style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
                 >
-                  {renderContent(msg.content, isLight)}
+                  <div style={{ color: '#0f172a' }}>
+                    {renderContent(msg.content, isLight, msg.role === 'user')}
+                  </div>
                 </div>
 
                 <span
-                  className={`text-[10px] font-mono px-1 ${
-                    isLight
-                      ? 'text-slate-400'
-                      : 'text-white/30'
+                  className={`text-[10px] font-mono px-1 font-semibold ${
+                    msg.role === 'user'
+                      ? 'text-[#005088]'
+                      : 'text-slate-500'
                   }`}
+                  style={{ color: msg.role === 'user' ? '#005088' : '#64748b' }}
                 >
                   {format(msg.timestamp, 'HH:mm')}
                 </span>
@@ -502,41 +485,6 @@ export default function ChatPage() {
                 <span className="text-xs font-mono ml-1">
                   Analyzing ocean parameters...
                 </span>
-              </div>
-            </div>
-          )}
-
-          {/* ==================================================
-              SUGGESTIONS
-          ================================================== */}
-
-          {showSuggestions && messages.length === 1 && (
-            <div className="space-y-2 py-3">
-              <p
-                className={`text-xs font-bold flex items-center gap-1 ${
-                  isLight
-                    ? 'text-slate-500'
-                    : 'text-white/40'
-                }`}
-              >
-                <ChevronDown size={12} />
-                Suggested Questions
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {SUGGESTIONS.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => sendMessage(suggestion)}
-                    className={`text-left px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                      isLight
-                        ? 'bg-white hover:bg-blue-50/50 border-slate-200 hover:border-[#005088] text-slate-700 hover:text-[#005088] shadow-2xs'
-                        : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
-                    }`}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
               </div>
             </div>
           )}

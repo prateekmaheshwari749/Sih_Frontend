@@ -29,14 +29,6 @@ const INITIAL_MESSAGE: ChatMessage = {
   timestamp: new Date(),
 };
 
-const SUGGESTIONS = [
-  'Show 0–1000m thermal profile',
-  'What is current SST in Bay of Bengal?',
-  'Explain Mixed Layer Depth (MLD)',
-  'Is there any active cyclone warning?',
-  'How does the 15-layer neural model work?',
-];
-
 // Backend-only response handling.
 // IMPORTANT: No synthetic/fabricated ocean values are generated here.
 function getBackendErrorMessage(error: unknown): string {
@@ -51,20 +43,33 @@ function getBackendErrorMessage(error: unknown): string {
   );
 }
 
-// Markdown formatting helper with clean light theme contrast
-function formatMarkdown(text: string) {
+function formatMarkdown(text: string, isUser = false) {
   return text.split('\n').map((line, i) => {
     const parts = line.split(/\*\*(.*?)\*\*/g);
 
     return (
-      <span key={i} className="block min-h-[1.2em]">
+      <span
+        key={i}
+        className="block min-h-[1.2em]"
+        style={{ color: '#0f172a' }}
+      >
         {parts.map((part, j) =>
           j % 2 === 1 ? (
-            <strong key={j} className="text-[#005088] font-bold">
+            <strong
+              key={j}
+              className="text-[#005088] font-black"
+              style={{ color: '#005088' }}
+            >
               {part}
             </strong>
           ) : (
-            part
+            <span
+              key={j}
+              className={isUser ? 'text-slate-900 font-semibold' : 'text-slate-900 font-medium'}
+              style={{ color: '#0f172a' }}
+            >
+              {part}
+            </span>
           ),
         )}
       </span>
@@ -159,40 +164,63 @@ export default function XAIFloatingPopup() {
     setInput('');
     setIsTyping(true);
 
-    try {
-      // Production backend:
-      // POST /chat
-      const res = await sendChat(clean);
+try {
+  const outgoingHistory = [
+    ...messages,
+    userMsg,
+  ]
+    .filter(
+      message =>
+        message.role === 'user' ||
+        message.role === 'assistant',
+    )
+    .slice(-12)
+    .map(message => ({
+      role: message.role,
+      content: message.content,
+    }));
 
-      const reply =
-        typeof res?.reply === 'string'
-          ? res.reply.trim()
-          : '';
+  const res = await sendChat(
+    clean,
+    outgoingHistory,
+    {
+      route: window.location.pathname,
+      page_title: document.title,
+    },
+  );
 
-      if (!reply) {
-        throw new Error('The XAI backend returned an empty reply.');
-      }
+  const reply =
+    typeof res?.reply === 'string'
+      ? res.reply
+      : 'I could not generate a response.';
 
-      const assistantMsg: ChatMessage = {
-        id: `${Date.now()}-assistant`,
-        role: 'assistant',
-        content: reply,
-        timestamp: new Date(),
-      };
+  const assistantMsg: ChatMessage = {
+    id: `${Date.now()}-assistant`,
+    role: 'assistant',
+    content: reply,
+    timestamp: new Date(),
+  };
 
-      setMessages(prev => [...prev, assistantMsg]);
-    } catch (error) {
-      const assistantMsg: ChatMessage = {
-        id: `${Date.now()}-error`,
-        role: 'assistant',
-        content: getBackendErrorMessage(error),
-        timestamp: new Date(),
-      };
+  setMessages(prev => [
+    ...prev,
+    assistantMsg,
+  ]);
+} catch (error) {
+  const errorMsg: ChatMessage = {
+    id: `${Date.now()}-error`,
+    role: 'assistant',
+    content:
+      'XAI is temporarily unavailable. Please try again.',
+    timestamp: new Date(),
+  };
 
-      setMessages(prev => [...prev, assistantMsg]);
-    } finally {
-      setIsTyping(false);
-    }
+  setMessages(prev => [
+    ...prev,
+    errorMsg,
+  ]);
+} finally {
+  setIsTyping(false);
+}
   };
 
   const handleClearChat = () => {
@@ -371,22 +399,27 @@ export default function XAIFloatingPopup() {
                 )}
 
                 <div
-                  className={`max-w-[84%] p-3 rounded-xl text-xs leading-relaxed ${
+                  className={`max-w-[84%] p-3.5 rounded-2xl text-xs leading-relaxed shadow-sm bg-white border ${
                     msg.role === 'user'
-                      ? 'bg-[#005088] text-white rounded-br-none shadow-xs'
-                      : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-xs'
+                      ? 'border-cyan-500/50 text-slate-900 rounded-br-xs shadow-md'
+                      : 'border-slate-200 text-slate-900 rounded-bl-xs'
                   }`}
+                  style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
                 >
-                  <div className="break-words space-y-1">
-                    {formatMarkdown(msg.content)}
+                  <div
+                    className="break-words space-y-1"
+                    style={{ color: '#0f172a' }}
+                  >
+                    {formatMarkdown(msg.content, msg.role === 'user')}
                   </div>
 
                   <div
-                    className={`text-[9px] mt-1 font-mono ${
+                    className={`text-[9.5px] mt-1.5 font-mono font-semibold ${
                       msg.role === 'user'
-                        ? 'text-blue-200 text-right'
-                        : 'text-slate-400 text-left'
+                        ? 'text-[#005088] text-right'
+                        : 'text-slate-500 text-left'
                     }`}
+                    style={{ color: msg.role === 'user' ? '#005088' : '#64748b' }}
                   >
                     {msg.timestamp.toLocaleTimeString([], {
                       hour: '2-digit',
@@ -396,7 +429,7 @@ export default function XAIFloatingPopup() {
                 </div>
 
                 {msg.role === 'user' && (
-                  <div className="w-7 h-7 rounded-lg bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-xs">
+                  <div className="w-7 h-7 rounded-lg bg-white border-2 border-[#005088] flex items-center justify-center text-[#005088] flex-shrink-0 mt-0.5 shadow-xs">
                     <User className="w-3.5 h-3.5" />
                   </div>
                 )}
@@ -416,21 +449,6 @@ export default function XAIFloatingPopup() {
             )}
 
             <div ref={chatBottomRef} />
-          </div>
-
-          {/* Quick Suggestion Chips */}
-          <div className="px-3 py-2 border-t border-slate-200 bg-slate-100/90 overflow-x-auto scrollbar-none flex gap-1.5">
-            {SUGGESTIONS.map(s => (
-              <button
-                key={s}
-                onClick={() => handleSendMessage(s)}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10.5px] font-medium bg-white hover:bg-[#005088] border border-slate-300 hover:border-[#005088] text-slate-700 hover:text-white transition-all cursor-pointer shrink-0 shadow-2xs"
-                type="button"
-                disabled={isTyping}
-              >
-                {s}
-              </button>
-            ))}
           </div>
 
           {/* Input Footer Bar */}
@@ -472,31 +490,32 @@ export default function XAIFloatingPopup() {
             setHasInteracted(true);
           }}
           className="
-            group relative flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl
-            bg-[#005088] hover:bg-[#003d66]
-            border border-[#003d66] shadow-lg
-            text-white cursor-pointer transition-all
+            group relative flex items-center gap-3 px-4 py-2.5 rounded-2xl
+            bg-gradient-to-r from-[#003865] via-[#005088] to-[#0066a4] hover:from-[#004277] hover:to-[#0077be]
+            border-2 border-cyan-300 hover:border-cyan-200
+            shadow-[0_8px_30px_rgba(6,182,212,0.45),0_0_16px_rgba(56,189,248,0.4)]
+            text-white cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95
           "
           aria-label="Open X AI Ocean Copilot"
           type="button"
         >
           {/* Pulsing beacon glow */}
-          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+          <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-80" />
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-cyan-300 border-2 border-[#003865] shadow-xs" />
           </span>
 
-          <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
-            <Bot className="w-3.5 h-3.5" />
+          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 border border-cyan-200 flex items-center justify-center text-white shadow-md group-hover:rotate-6 transition-transform">
+            <Bot className="w-4 h-4" />
           </div>
 
           <div className="flex flex-col text-left">
-            <span className="text-xs font-bold text-white tracking-tight flex items-center gap-1">
+            <span className="text-xs font-black text-white tracking-tight flex items-center gap-1.5 drop-shadow-xs">
               <span>X AI Copilot</span>
-              <Sparkles className="w-3 h-3 text-amber-300" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
             </span>
 
-            <span className="text-[9px] text-blue-200 font-mono">
+            <span className="text-[10px] text-cyan-200 font-mono font-bold tracking-wide">
               Ocean Intelligence
             </span>
           </div>

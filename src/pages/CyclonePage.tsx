@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Wind,
   Thermometer,
@@ -20,8 +20,8 @@ import {
   Globe,
   Waves,
   Activity,
-  CheckCircle2,
-  Info,
+  Grid3X3,
+  X,
 } from 'lucide-react';
 import {
   LineChart,
@@ -42,6 +42,7 @@ import {
   Polyline,
   Polygon,
   Circle,
+  Rectangle,
   Tooltip as LeafletTooltip,
   useMap,
 } from 'react-leaflet';
@@ -52,6 +53,13 @@ import RiskBadge from '../components/RiskBadge';
 import IndiaFlag from '../components/IndiaFlag';
 import CycloneCockpitSimulator from '../components/CycloneCockpitSimulator';
 import type { CycloneWaypoint, CycloneScenario } from '../components/IndiaCycloneRadarMap';
+import {
+  fetchCyclonePhase1,
+  fetchCycloneHistoricalTrack,
+  fetchHistoricalCyclonesByDate,
+  fetchCycloneForecast,
+  checkBackendConnection,
+} from '../api/oceanApi';
 
 // ── Fix Leaflet icons ────────────────────────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -413,75 +421,6 @@ const CYCLONE_COMPARISONS = [
   },
 ];
 
-// ── Physical Cyclone Prediction Parameters Specification ───────────────────────
-const PREDICTION_PARAMETERS = [
-  {
-    id: 'ohc',
-    name: 'Ocean Heat Content (OHC / TCHP)',
-    symbol: 'Q_H',
-    unit: 'kJ/cm²',
-    threshold: '> 60–80 kJ/cm² (Explosive RI Trigger)',
-    color: 'text-orange-400',
-    border: 'border-orange-500/30',
-    bg: 'bg-orange-500/10',
-    icon: Zap,
-    role: 'Primary Thermal Engine',
-    desc: 'Integrated enthalpy from the surface down to the 26°C isotherm. Reconstructed directly by OCEANINTEL from satellite altimetry & SST. When OHC exceeds 80 kJ/cm², tropical cyclones experience explosive intensification.',
-  },
-  {
-    id: 'sst',
-    name: 'Sea Surface Temperature (SST)',
-    symbol: 'T_surf',
-    unit: '°C',
-    threshold: '≥ 26.5°C (Genesis Baseline)',
-    color: 'text-red-400',
-    border: 'border-red-500/30',
-    bg: 'bg-red-500/10',
-    icon: Thermometer,
-    role: 'Thermodynamic Trigger',
-    desc: 'Provides the sensible & latent heat boundary flux. However, high SST alone is deceptive: if the subsurface is cold, strong cyclonic winds immediately stir up frigid water and choke the storm.',
-  },
-  {
-    id: 'd26',
-    name: 'Depth of 26°C Isotherm (D26)',
-    symbol: 'Z_26',
-    unit: 'meters',
-    threshold: '> 50 m (Negative Feedback Buffer)',
-    color: 'text-teal-400',
-    border: 'border-teal-500/30',
-    bg: 'bg-teal-500/10',
-    icon: Layers,
-    role: 'Upwelling Resistance',
-    desc: 'When D26 is deep (>50m), intense Ekman upwelling draws warm water up into the eyewall rather than cold water. This insulates the storm from creating a self-destructive cold wake.',
-  },
-  {
-    id: 'vws',
-    name: 'Vertical Wind Shear (VWS)',
-    symbol: 'ΔV (850–200 hPa)',
-    unit: 'knots',
-    threshold: '< 10 kts (Favorable Chimney)',
-    color: 'text-cyan-400',
-    border: 'border-cyan-500/30',
-    bg: 'bg-cyan-500/10',
-    icon: Compass,
-    role: 'Atmospheric Structural Stability',
-    desc: 'The velocity difference between the lower (850 hPa) and upper (200 hPa) troposphere. Low shear preserves the vertical chimney structure of the cyclone warm core.',
-  },
-  {
-    id: 'mld',
-    name: 'Mixed Layer Depth (MLD)',
-    symbol: 'h_m',
-    unit: 'meters',
-    threshold: '> 30–45 m',
-    color: 'text-purple-400',
-    border: 'border-purple-500/30',
-    bg: 'bg-purple-500/10',
-    icon: Wind,
-    role: 'Turbulent Mixing Buffer',
-    desc: 'Upper nearly-isothermal layer created by wind turbulence. A deep mixed layer delays cold thermocline entrainment during cyclonic passage.',
-  },
-];
-
 // ── Coastal IMD Doppler Weather Radar (DWR) Stations ───────────────────────
 const COASTAL_DWR_STATIONS = [
   { name: 'DWR Paradip', code: 'PRD', state: 'Odisha', lat: 20.31, lon: 86.61, rangeKm: 350 },
@@ -533,6 +472,201 @@ const ACTIVE_BOB_SCENARIO: CycloneScenario = {
   },
 };
 
+
+// ── Cyclone page visual system: consistent glass / cyan / slate controls ───────
+const CYCLONE_PAGE_STYLES = `
+  .cyclone-shell button {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cyclone-shell button:focus-visible,
+  .cyclone-shell input:focus-visible {
+    outline: 2px solid rgba(34, 211, 238, 0.8);
+    outline-offset: 2px;
+  }
+  .cyclone-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border: 1px solid rgba(103, 232, 249, 0.55);
+    background: linear-gradient(135deg, rgba(6,182,212,0.92), rgba(37,99,235,0.90));
+    color: #ffffff !important;
+    box-shadow: 0 8px 24px rgba(6,182,212,0.16);
+    transition: all .18s ease;
+  }
+  .cyclone-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px rgba(6,182,212,0.22);
+  }
+  .cyclone-primary:active:not(:disabled) { transform: translateY(0); }
+  .cyclone-secondary,
+  .cyclone-segment,
+  .cyclone-ghost {
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(15,23,42,0.75) !important;
+    color: #ffffff !important;
+    backdrop-filter: blur(14px);
+    transition: all .18s ease;
+  }
+  .cyclone-secondary:hover:not(:disabled),
+  .cyclone-segment:hover:not(:disabled),
+  .cyclone-ghost:hover:not(:disabled) {
+    background: rgba(30,41,59,0.90) !important;
+    color: #ffffff !important;
+    border-color: rgba(103,232,249,0.45) !important;
+  }
+  .cyclone-segment-active {
+    background: rgba(6,182,212,0.28) !important;
+    color: #38bdf8 !important;
+    border-color: rgba(34,211,238,0.85) !important;
+    box-shadow: 0 4px 16px rgba(6,182,212,0.20);
+  }
+  .cyclone-tab-active {
+    background: linear-gradient(135deg, rgba(6,182,212,0.28), rgba(37,99,235,0.25)) !important;
+    color: #38bdf8 !important;
+    border-color: rgba(34,211,238,0.80) !important;
+    box-shadow: 0 8px 24px rgba(6,182,212,0.18);
+  }
+  .cyclone-day-active {
+    background: linear-gradient(135deg, rgba(6,182,212,0.25), rgba(37,99,235,0.22)) !important;
+    border-color: rgba(34,211,238,0.85) !important;
+    box-shadow: 0 10px 24px rgba(6,182,212,0.20);
+    color: #ffffff !important;
+  }
+  .cyclone-day-idle {
+    background: rgba(255,255,255,0.07) !important;
+    border-color: rgba(255,255,255,0.15) !important;
+    color: #ffffff !important;
+  }
+  .cyclone-toggle-on {
+    background: rgba(6, 182, 212, 0.28) !important;
+    border-color: rgba(34, 211, 238, 0.85) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 14px rgba(6, 182, 212, 0.28);
+  }
+  .cyclone-toggle-off {
+    background: rgba(15, 23, 42, 0.75) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    color: rgba(255, 255, 255, 0.70) !important;
+  }
+  .cyclone-warning { color: #fde68a !important; }
+  .cyclone-danger { color: #fda4af !important; }
+  .cyclone-map-header {
+    background: rgba(2, 9, 23, 0.88) !important;
+    border-color: rgba(34,211,238,0.25) !important;
+    color: #ffffff !important;
+    backdrop-filter: blur(16px);
+  }
+  .cyclone-status-online {
+    background: rgba(16,185,129,0.15) !important;
+    color: #86efac !important;
+    border-color: rgba(16,185,129,0.40) !important;
+  }
+  .cyclone-status-offline {
+    background: rgba(239,68,68,0.15) !important;
+    color: #fda4af !important;
+    border-color: rgba(239,68,68,0.40) !important;
+  }
+  .cyclone-status-checking {
+    background: rgba(245,158,11,0.15) !important;
+    color: #fde68a !important;
+    border-color: rgba(245,158,11,0.40) !important;
+  }
+`;
+
+// ── NIO Domain & 1°×1° Spatial Grid (Matching Map Page) ──────────────────────
+const NIO_BOUNDS: L.LatLngBoundsLiteral = [
+  [5, 45],
+  [30, 105],
+];
+
+const GRID_LAT_STEPS = 25; // 5°N → 30°N in 1° steps
+const GRID_LON_STEPS = 60; // 45°E → 105°E in 1° steps
+const GRID_LAT_RES = 1;
+const GRID_LON_RES = 1;
+
+function buildCycloneGridCells() {
+  const cells: { lat: number; lon: number; bounds: L.LatLngBoundsLiteral }[] = [];
+  for (let row = 0; row < GRID_LAT_STEPS; row++) {
+    for (let col = 0; col < GRID_LON_STEPS; col++) {
+      const south = 5 + row * GRID_LAT_RES;
+      const north = south + GRID_LAT_RES;
+      const west = 45 + col * GRID_LON_RES;
+      const east = west + GRID_LON_RES;
+      const centerLat = +(south + GRID_LAT_RES / 2).toFixed(2);
+      const centerLon = +(west + GRID_LON_RES / 2).toFixed(2);
+      cells.push({
+        lat: centerLat,
+        lon: centerLon,
+        bounds: [[south, west], [north, east]],
+      });
+    }
+  }
+  return cells;
+}
+
+const CYCLONE_GRID_CELLS = buildCycloneGridCells();
+
+function CycloneMapGrid({ showGrid }: { showGrid: boolean }) {
+  const [hoveredCell, setHoveredCell] = useState<string | null>(null);
+  if (!showGrid) return null;
+
+  return (
+    <>
+      {/* ── NIO Study Domain Outer Border (Yellow Dashed matching Map page) ── */}
+      <Rectangle
+        bounds={NIO_BOUNDS}
+        pathOptions={{
+          color: '#facc15',
+          weight: 2.5,
+          dashArray: '8 5',
+          fillOpacity: 0,
+        }}
+      >
+        <LeafletTooltip sticky={false} direction="top">
+          <span className="text-xs font-mono font-bold text-yellow-300">
+            NIO Study Domain · 5°N–30°N, 45°E–105°E
+          </span>
+        </LeafletTooltip>
+      </Rectangle>
+
+      {/* ── 1°×1° Spatial Grid Cells & Borders matching Map page ── */}
+      {CYCLONE_GRID_CELLS.map((cell) => {
+        const key = `${cell.lat},${cell.lon}`;
+        const isHovered = hoveredCell === key;
+        return (
+          <Rectangle
+            key={key}
+            bounds={cell.bounds}
+            pathOptions={{
+              color: isHovered ? '#38bdf8' : 'rgba(56, 189, 248, 0.28)',
+              weight: isHovered ? 1.5 : 0.6,
+              fillColor: '#06b6d4',
+              fillOpacity: isHovered ? 0.25 : 0.02,
+            }}
+            eventHandlers={{
+              mouseover: () => setHoveredCell(key),
+              mouseout: () => setHoveredCell(null),
+            }}
+          >
+            <LeafletTooltip sticky direction="top" offset={[0, -4]}>
+              <div className="text-xs space-y-0.5 p-0.5 font-mono">
+                <p className="font-bold text-white">
+                  {cell.lat}°N · {cell.lon}°E
+                </p>
+                <p className="text-[10px] text-cyan-300">
+                  1°×1° Spatial Grid Cell
+                </p>
+              </div>
+            </LeafletTooltip>
+          </Rectangle>
+        );
+      })}
+    </>
+  );
+}
+
 // ── Map Controller Component for Viewport Changes ─────────────────────────────
 function MapViewController({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
@@ -544,20 +678,97 @@ function MapViewController({ center, zoom }: { center: [number, number]; zoom: n
 
 export default function CyclonePage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const isValidDate = (value: string | null | undefined): value is string =>
+    !!value && /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+
+  const initialSessionDate =
+    (isValidDate(searchParams.get('date')) ? searchParams.get('date') : null) ||
+    (isValidDate(localStorage.getItem('ocean_input_date')) ? localStorage.getItem('ocean_input_date') : null) ||
+    (isValidDate(localStorage.getItem('ocean_shared_date')) ? localStorage.getItem('ocean_shared_date') : null) ||
+    '2026-09-18';
+
+  const initialSessionLat = Number(searchParams.get('lat') ?? localStorage.getItem('ocean_shared_lat') ?? 15.0);
+  const initialSessionLon = Number(searchParams.get('lon') ?? localStorage.getItem('ocean_shared_lon') ?? 75.0);
 
   // Active view tabs
-  const [activeTab, setActiveTab] = useState<'simulation' | 'comparison' | 'parameters'>('simulation');
+  const [activeTab, setActiveTab] = useState<'simulation' | 'comparison'>('simulation');
 
   // 7-day timeline simulation state
   const [activeDayIdx, setActiveDayIdx] = useState<number>(0); // 0 = Day 0 (Today)
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playSpeed, setPlaySpeed] = useState<number>(1); // 1x, 2x, 4x
 
+  // ── Historical Cyclone Track State ───────────────────────────────────────
+interface HistoricalTrackPoint {
+  date: string;
+  latitude: number;
+  longitude: number;
+  observation_time?: string;
+  wind?: number;
+  pressure?: number;
+}
+
+interface HistoricalCycloneCandidate {
+  storm_id: string;
+  date: string;
+  latitude: number;
+  longitude: number;
+  wind?: number;
+  pressure?: number;
+  split: string;
+}
+
+const [historicalSelectedDate, setHistoricalSelectedDate] = useState<string>(initialSessionDate);
+const [historicalCandidates, setHistoricalCandidates] = useState<HistoricalCycloneCandidate[]>([]);
+const [historicalSearchLoading, setHistoricalSearchLoading] = useState<boolean>(false);
+const [historicalSearchError, setHistoricalSearchError] = useState<string | null>(null);
+const [historicalNoCyclone, setHistoricalNoCyclone] = useState<boolean>(false);
+const [simulationWarning, setSimulationWarning] = useState<string | null>(null);
+
+const [historicalStormId, setHistoricalStormId] = useState<string>('');
+const [historicalSplit, setHistoricalSplit] = useState<string>('test');
+
+const [historicalTrack, setHistoricalTrack] = useState<HistoricalTrackPoint[]>([]);
+const [historicalTrackLoading, setHistoricalTrackLoading] = useState<boolean>(false);
+const [historicalTrackError, setHistoricalTrackError] = useState<string | null>(null);
+
+interface CycloneModelForecastPoint {
+  horizon_h: number;
+  latitude: number;
+  longitude: number;
+  wind: number;
+  pressure: number;
+}
+
+interface CycloneModelForecastResponse {
+  status: string;
+  model?: {
+    name?: string;
+    checkpoint_epoch?: number | null;
+    checkpoint_val_loss?: number | null;
+  };
+  sample?: {
+    sample_id?: string;
+    storm_id?: string;
+    issue_date?: string;
+    issue_position?: { latitude: number; longitude: number };
+  };
+  forecast: CycloneModelForecastPoint[];
+}
+
+const [modelForecast, setModelForecast] = useState<CycloneModelForecastPoint[]>([]);
+const [modelForecastIssueDate, setModelForecastIssueDate] = useState<string | null>(null);
+const [modelForecastLoading, setModelForecastLoading] = useState<boolean>(false);
+const [modelForecastError, setModelForecastError] = useState<string | null>(null);
+
   // Map camera & view mode
   const [mapPreset, setMapPreset] = useState<'regional' | 'world' | 'landfall'>('regional');
   const [basemapTile, setBasemapTile] = useState<'satellite' | 'dark'>('satellite');
 
   // Layer toggles
+  const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showVortex, setShowVortex] = useState<boolean>(true);
   const [showStreamlines, setShowStreamlines] = useState<boolean>(true);
   const [showCone, setShowCone] = useState<boolean>(true);
@@ -569,7 +780,343 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
   // Comparison graph metric toggle
   const [comparisonMetric, setComparisonMetric] = useState<'wind' | 'pressure'>('wind');
 
-  const currentStep = SEVEN_DAY_FORECAST[activeDayIdx] ?? SEVEN_DAY_FORECAST[0];
+  // ── Real Backend Cyclone Phase-1 Prediction State ───────────────────────────
+  // Phase-1 is a point/date formation prediction. It is intentionally kept
+  // separate from the existing 7-day simulation dataset below.
+
+  interface Phase1Features {
+    sst?: number;
+    sss?: number;
+    ssh?: number;
+    u_wind?: number;
+    v_wind?: number;
+    current_u?: number;
+    current_v?: number;
+    delta_sst?: number;
+    delta_current_u?: number;
+    delta_current_v?: number;
+    latitude?: number;
+    longitude?: number;
+    month?: number;
+  }
+
+  interface Phase1Result {
+    status?: string;
+    phase?: number;
+    task?: string;
+    date?: string;
+    latitude?: number;
+    longitude?: number;
+    grid_lat?: number;
+    grid_lon?: number;
+    grid_distance_deg?: number;
+    formation_probability?: number;
+    formation_probability_percent?: number;
+    prediction?: number;
+    risk?: string;
+    features?: Phase1Features;
+  }
+
+  const [phase1Date, setPhase1Date] = useState<string>(initialSessionDate);
+  const [phase1Latitude, setPhase1Latitude] = useState<number>(Number.isFinite(initialSessionLat) ? initialSessionLat : 15.0);
+  const [phase1Longitude, setPhase1Longitude] = useState<number>(Number.isFinite(initialSessionLon) ? initialSessionLon : 75.0);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [backendChecking, setBackendChecking] = useState<boolean>(true);
+  const [phase1Result, setPhase1Result] = useState<Phase1Result | null>(null);
+  const [phase1Loading, setPhase1Loading] = useState<boolean>(false);
+  const [phase1Error, setPhase1Error] = useState<string | null>(null);
+
+  // Keep cyclone inputs synchronized with the same user-input session used by
+  // Dashboard → WorldMap → Surface → 3D.
+  useEffect(() => {
+    const syncSharedSession = () => {
+      const dateFromUrl = searchParams.get('date')?.trim() || '';
+      const dateFromStorage = localStorage.getItem('ocean_input_date')?.trim() ||
+        localStorage.getItem('ocean_shared_date')?.trim() || '';
+      const nextDate = isValidDate(dateFromUrl) ? dateFromUrl : dateFromStorage;
+      const nextLat = Number(searchParams.get('lat') ?? localStorage.getItem('ocean_shared_lat'));
+      const nextLon = Number(searchParams.get('lon') ?? localStorage.getItem('ocean_shared_lon'));
+
+      if (isValidDate(nextDate) && nextDate !== phase1Date) setPhase1Date(nextDate);
+      if (Number.isFinite(nextLat) && nextLat >= 5 && nextLat <= 30) setPhase1Latitude(nextLat);
+      if (Number.isFinite(nextLon) && nextLon >= 45 && nextLon <= 105) setPhase1Longitude(nextLon);
+    };
+
+    const onDateChanged = () => syncSharedSession();
+    syncSharedSession();
+    window.addEventListener('ocean-input-date-changed', onDateChanged);
+    window.addEventListener('storage', onDateChanged);
+    return () => {
+      window.removeEventListener('ocean-input-date-changed', onDateChanged);
+      window.removeEventListener('storage', onDateChanged);
+    };
+  }, [searchParams, phase1Date]);
+
+  const refreshBackendStatus = useCallback(async () => {
+    setBackendChecking(true);
+    try {
+      const online = await checkBackendConnection();
+      setBackendOnline(online);
+    } catch {
+      setBackendOnline(false);
+    } finally {
+      setBackendChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshBackendStatus();
+    const timer = window.setInterval(refreshBackendStatus, 30000);
+    return () => window.clearInterval(timer);
+  }, [refreshBackendStatus]);
+
+  const handlePhase1Prediction = useCallback(async () => {
+    if (!phase1Date) {
+      setPhase1Error('Please select a prediction date.');
+      return;
+    }
+
+    if (
+      !Number.isFinite(phase1Latitude) ||
+      phase1Latitude < 5 ||
+      phase1Latitude > 30 ||
+      !Number.isFinite(phase1Longitude) ||
+      phase1Longitude < 45 ||
+      phase1Longitude > 105
+    ) {
+      setPhase1Error('Location must be inside the model domain: 5–30°N, 45–105°E.');
+      return;
+    }
+
+    setPhase1Loading(true);
+    setPhase1Error(null);
+
+    try {
+      if (backendOnline === false) {
+        throw new Error('OceanEmbed backend is offline. Start FastAPI/Uvicorn and retry the Phase-1 prediction.');
+      }
+
+      const result = await fetchCyclonePhase1({
+        date: phase1Date,
+        latitude: phase1Latitude,
+        longitude: phase1Longitude,
+      });
+
+      setPhase1Result(result as Phase1Result);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Cyclone Phase-1 prediction failed.';
+      setPhase1Result(null);
+      setPhase1Error(message);
+    } finally {
+      setPhase1Loading(false);
+    }
+  }, [phase1Date, phase1Latitude, phase1Longitude, backendOnline]);
+
+  // ── Historical date lookup + real 7-day replay ─────────────────────────
+  const handleHistoricalDateSearch = useCallback(async () => {
+    if (!historicalSelectedDate) {
+      setHistoricalSearchError('Please select a historical date.');
+      return;
+    }
+
+    setHistoricalSearchLoading(true);
+    setHistoricalSearchError(null);
+    setHistoricalNoCyclone(false);
+    setSimulationWarning(null);
+    setHistoricalCandidates([]);
+    setHistoricalTrack([]);
+    setHistoricalTrackError(null);
+    setHistoricalStormId('');
+    setModelForecast([]);
+    setModelForecastIssueDate(null);
+    setModelForecastError(null);
+    setActiveDayIdx(0);
+    setIsPlaying(false);
+
+    try {
+      if (backendOnline === false) {
+        throw new Error('OceanEmbed backend is offline. Start FastAPI/Uvicorn and retry.');
+      }
+
+      const result = await fetchHistoricalCyclonesByDate(historicalSelectedDate);
+      const candidates = Array.isArray(result.cyclones)
+        ? (result.cyclones as HistoricalCycloneCandidate[])
+        : [];
+
+      setHistoricalCandidates(candidates);
+      setHistoricalNoCyclone(candidates.length === 0);
+
+      if (candidates.length === 1) {
+        setHistoricalStormId(candidates[0].storm_id);
+        setHistoricalSplit(candidates[0].split);
+      }
+    } catch (error) {
+      setHistoricalSearchError(
+        error instanceof Error
+          ? error.message
+          : 'Historical cyclone lookup failed.',
+      );
+    } finally {
+      setHistoricalSearchLoading(false);
+    }
+  }, [backendOnline, historicalSelectedDate]);
+
+  const loadHistoricalTrack = useCallback(async (
+    stormId: string,
+    split: string,
+    startDate: string,
+  ) => {
+    setHistoricalTrackLoading(true);
+    setHistoricalTrackError(null);
+
+    try {
+      if (backendOnline === false) {
+        throw new Error('OceanEmbed backend is offline. Start FastAPI/Uvicorn and retry.');
+      }
+
+      const result = await fetchCycloneHistoricalTrack(stormId, split);
+      const startIndex = result.track.findIndex((point) => point.date === startDate);
+
+      if (startIndex < 0) {
+        throw new Error(`No historical track observation found for ${startDate}.`);
+      }
+
+      const replay = result.track.slice(startIndex, startIndex + 7);
+      if (replay.length === 0) {
+        throw new Error(`No historical observations are available from ${startDate}.`);
+      }
+
+      setHistoricalStormId(stormId);
+      setHistoricalSplit(split);
+      setHistoricalTrack(replay);
+      setActiveDayIdx(0);
+      setIsPlaying(false);
+      setModelForecast([]);
+      setModelForecastIssueDate(null);
+      setModelForecastError(null);
+    } catch (error) {
+      setHistoricalTrack([]);
+        setHistoricalTrackError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to load historical cyclone track.',
+      );
+    } finally {
+      setHistoricalTrackLoading(false);
+    }
+  }, [backendOnline]);
+
+  const handleSelectHistoricalCyclone = useCallback((candidate: HistoricalCycloneCandidate) => {
+    setHistoricalStormId(candidate.storm_id);
+    setHistoricalSplit(candidate.split);
+    setHistoricalSearchError(null);
+    setHistoricalNoCyclone(false);
+  }, []);
+
+  const handleRunHistoricalSimulation = useCallback(async () => {
+    const candidate = historicalCandidates.find(
+      (item) => item.storm_id === historicalStormId && item.split === historicalSplit,
+    ) ?? historicalCandidates[0];
+
+    if (!candidate) {
+      setHistoricalSearchError('Select a historical cyclone first.');
+      return;
+    }
+
+    await loadHistoricalTrack(
+      candidate.storm_id,
+      candidate.split,
+      historicalSelectedDate,
+    );
+
+    // Start the 7-day historical replay automatically after the real
+    // historical track has been loaded. The playback effect advances
+    // one historical observation at a time until the final day.
+    setIsPlaying(true);
+  }, [historicalCandidates, historicalSelectedDate, historicalSplit, historicalStormId, loadHistoricalTrack]);
+
+  const handleModelForecast = useCallback(async () => {
+    const issuePoint = historicalTrack[0];
+    if (!issuePoint) {
+      setModelForecastError('Load a historical cyclone track first.');
+      return;
+    }
+
+    setModelForecastLoading(true);
+    setModelForecastError(null);
+
+    try {
+      if (backendOnline === false) {
+        throw new Error('OceanEmbed backend is offline. Start FastAPI/Uvicorn and retry.');
+      }
+
+      const issueDate = historicalSelectedDate;
+      const result = await fetchCycloneForecast({
+        storm_id: historicalStormId,
+        issue_date: issueDate,
+        split: historicalSplit,
+      }) as CycloneModelForecastResponse;
+
+      if (!Array.isArray(result.forecast) || result.forecast.length === 0) {
+        throw new Error('OceanEmbed returned no forecast positions for this issue date.');
+      }
+
+      // Prevent a late response for an older replay date from being displayed.
+      if (historicalTrack[0]?.date !== issueDate) {
+        return;
+      }
+
+      setModelForecast(result.forecast);
+      setModelForecastIssueDate(issueDate);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'OceanEmbed cyclone forecast failed.';
+      setModelForecast([]);
+      setModelForecastIssueDate(null);
+      setModelForecastError(message);
+    } finally {
+      setModelForecastLoading(false);
+    }
+  }, [backendOnline, historicalSelectedDate, historicalSplit, historicalStormId, historicalTrack]);
+
+  const phase1Probability =
+    typeof phase1Result?.formation_probability_percent === 'number'
+      ? phase1Result.formation_probability_percent
+      : Number(phase1Result?.formation_probability_percent ?? NaN);
+
+  const phase1Features: Phase1Features | null =
+    phase1Result?.features ?? null;
+
+const historicalCurrentPoint = historicalTrack[activeDayIdx];
+
+const isHistoricalReplay = historicalTrack.length > 0;
+
+const currentStep: SevenDayForecastStep = useMemo(() => {
+  const fallback = SEVEN_DAY_FORECAST[activeDayIdx] ?? SEVEN_DAY_FORECAST[0];
+  if (historicalCurrentPoint) {
+    return {
+      ...fallback,
+      dayId: `historical-${activeDayIdx}`,
+      dayTitle: `Historical Observation · ${historicalCurrentPoint.date}`,
+      dayShort: historicalCurrentPoint.date.length > 5 ? historicalCurrentPoint.date.slice(5) : fallback.dayShort,
+      timeLabel: historicalCurrentPoint.date,
+      hour: activeDayIdx * 24,
+      hourOffset: activeDayIdx * 24,
+      lat: historicalCurrentPoint.latitude,
+      lon: historicalCurrentPoint.longitude,
+      category: fallback.category,
+      categoryName: fallback.categoryName,
+      windSpeedKmh: historicalCurrentPoint.wind ? Math.round(historicalCurrentPoint.wind * 1.852) : fallback.windSpeedKmh,
+      centralPressure: historicalCurrentPoint.pressure ?? fallback.centralPressure,
+    };
+  }
+  return fallback;
+}, [historicalCurrentPoint, activeDayIdx]);
+
   const timerRef = useRef<number | null>(null);
 
   // ── Camera Coordinates based on Preset ──────────────────────────────────────
@@ -583,13 +1130,14 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
     return { center: [18.2, 86.5], zoom: 5.2 }; // Regional Bay of Bengal track
   }, [mapPreset]);
 
-  // ── Automated Scrubber Playback Loop (7-Day Forecast) ───────────────────────
   useEffect(() => {
     if (isPlaying) {
+      const maxSteps = historicalTrack.length > 0 ? historicalTrack.length : SEVEN_DAY_FORECAST.length;
       const intervalMs = 2000 / playSpeed;
+
       timerRef.current = window.setInterval(() => {
         setActiveDayIdx((prev) => {
-          if (prev >= SEVEN_DAY_FORECAST.length - 1) {
+          if (prev >= maxSteps - 1) {
             setIsPlaying(false);
             return prev;
           }
@@ -599,31 +1147,103 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPlaying, playSpeed]);
 
-  const handlePlayPause = () => {
-    if (!isPlaying && activeDayIdx >= SEVEN_DAY_FORECAST.length - 1) {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [isPlaying, playSpeed, historicalTrack.length]);
+
+  const handleForceStandardSimulation = useCallback(() => {
+    setSimulationWarning(null);
+    setHistoricalTrack([]);
+    setActiveDayIdx(0);
+    setIsPlaying(true);
+  }, []);
+
+  const handlePlayPause = useCallback(() => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+
+    // Check if user has searched or selected a historical date with NO cyclone observations
+    if (
+      historicalNoCyclone ||
+      (historicalSelectedDate && historicalCandidates.length === 0 && historicalTrack.length === 0 && !historicalSearchLoading)
+    ) {
+      setSimulationWarning(
+        `No historical cyclone observation was found in the archive for ${historicalSelectedDate || 'the selected date'}. The 7-day historical simulation cannot be initiated without recorded cyclone data. Please choose a historical date with verified cyclone tracks (e.g. Cyclone Fani in May 2019, Amphan in May 2020, Biparjoy in June 2023) or click below to run the standard operational simulation.`
+      );
+      setIsPlaying(false);
+      return;
+    }
+
+    // If historical candidate is selected but track is not yet loaded, trigger historical track loader
+    if (historicalCandidates.length > 0 && historicalTrack.length === 0) {
+      setSimulationWarning(null);
+      void handleRunHistoricalSimulation();
+      return;
+    }
+
+    setSimulationWarning(null);
+    const maxSteps = historicalTrack.length > 0 ? historicalTrack.length : SEVEN_DAY_FORECAST.length;
+    if (activeDayIdx >= maxSteps - 1) {
       setActiveDayIdx(0);
     }
-    setIsPlaying(!isPlaying);
-  };
+    setIsPlaying(true);
+  }, [
+    isPlaying,
+    activeDayIdx,
+    historicalNoCyclone,
+    historicalSelectedDate,
+    historicalCandidates,
+    historicalTrack.length,
+    historicalSearchLoading,
+    handleRunHistoricalSimulation,
+  ]);
 
-  const handleResetToToday = () => {
+  const handleResetHistoricalReplay = useCallback(() => {
     setIsPlaying(false);
     setActiveDayIdx(0);
-  };
+    setSimulationWarning(null);
+  }, []);
 
-  // ── Trajectory Coordinates ──────────────────────────────────────────────────
-  const pastTrackPoints = useMemo(() => {
-    return SEVEN_DAY_FORECAST.slice(0, activeDayIdx + 1).map((w) => [w.lat, w.lon] as [number, number]);
-  }, [activeDayIdx]);
+  const handleResetSimulation = handleResetHistoricalReplay;
 
-  const forecastTrackPoints = useMemo(() => {
-    return SEVEN_DAY_FORECAST.slice(activeDayIdx).map((w) => [w.lat, w.lon] as [number, number]);
-  }, [activeDayIdx]);
+  // Track points: solid cyan line showing observed or simulated progression up to activeDayIdx
+  const pastTrackPoints = useMemo((): [number, number][] => {
+    if (historicalTrack.length > 0) {
+      return historicalTrack
+        .slice(0, activeDayIdx + 1)
+        .map((point): [number, number] => [point.latitude, point.longitude]);
+    }
+    return SEVEN_DAY_FORECAST.slice(0, activeDayIdx + 1).map(
+      (step): [number, number] => [step.lat, step.lon],
+    );
+  }, [historicalTrack, activeDayIdx]);
+
+  // Projected forecast track: dashed amber line
+  const forecastTrackPoints = useMemo((): [number, number][] => {
+    if (historicalTrack.length > 0) {
+      const issuePoint = historicalTrack[0];
+      if (
+        !issuePoint ||
+        modelForecastIssueDate !== issuePoint.date ||
+        modelForecast.length === 0
+      ) {
+        return [];
+      }
+      return [
+        [issuePoint.latitude, issuePoint.longitude],
+        ...modelForecast.map((point): [number, number] => [point.latitude, point.longitude]),
+      ];
+    }
+    return SEVEN_DAY_FORECAST.slice(activeDayIdx).map(
+      (step): [number, number] => [step.lat, step.lon],
+    );
+  }, [historicalTrack, modelForecast, modelForecastIssueDate, activeDayIdx]);
 
   // ── Dynamic Spiral Atmospheric Inflow Streamlines ───────────────────────────
   const windStreamlines = useMemo(() => {
@@ -791,14 +1411,16 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
   };
 
   const pageContent = (
-    <PageContainer>
+    <div className="cyclone-shell cyclone-scope dark-glass-scope text-white">
+      <style>{CYCLONE_PAGE_STYLES}</style>
+      <PageContainer>
         {/* ── Page Header ── */}
         <PageHeader
           category="MINISTRY OF EARTH SCIENCES (MoES) · INDIA METEOROLOGICAL DEPARTMENT (IMD)"
           badge={
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] font-mono shadow-sm">
               <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-              CYCLONE EARLY WARNING RADAR ACTIVE · BOB-02
+              HISTORICAL CYCLONE REPLAY · {historicalStormId}
             </div>
           }
           icon={<Wind size={18} className="text-cyan-400" />}
@@ -808,7 +1430,7 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigate('/gov')}
-                className="btn-primary-cyan text-xs flex items-center gap-1.5"
+                className="cyclone-primary px-3 py-2 rounded-xl text-xs flex items-center gap-1.5"
               >
                 <Shield size={13} className="text-yellow-400" />
                 Government Advisory
@@ -816,6 +1438,171 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
             </div>
           }
         />
+
+        {/* ── REAL BACKEND: CYCLONE PHASE-1 FORMATION PREDICTION ── */}
+        <div className="glass rounded-3xl p-5 border border-cyan-500/30 depth-shadow mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                  <Activity size={16} />
+                </div>
+                <div>
+                  <h2 className="font-black text-base text-white">
+                    Cyclone Phase-1 Formation Prediction
+                  </h2>
+                  <p className="text-[11px] text-white/55 font-medium">
+                    Live trained XGBoost inference from the production backend
+                  </p>
+                  <div className={`mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[9px] font-mono font-bold ${
+                    backendChecking
+                      ? 'cyclone-status-checking'
+                      : backendOnline
+                        ? 'cyclone-status-online'
+                        : 'cyclone-status-offline'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      backendChecking
+                        ? 'bg-amber-300 animate-pulse'
+                        : backendOnline
+                          ? 'bg-emerald-300'
+                          : 'bg-rose-300'
+                    }`} />
+                    {backendChecking ? 'BACKEND CHECKING…' : backendOnline ? 'BACKEND ONLINE' : 'BACKEND OFFLINE'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full lg:w-auto">
+              <label className="text-[10px] text-white/45 font-mono uppercase">
+                Date
+                <input
+                  type="date"
+                  value={phase1Date}
+                  onChange={(e) => setPhase1Date(e.target.value)}
+                  className="mt-1 block w-full rounded-lg bg-slate-950/60 border border-white/10 px-2.5 py-2 text-xs text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+
+              <label className="text-[10px] text-white/45 font-mono uppercase">
+                Latitude
+                <input
+                  type="number"
+                  min={5}
+                  max={30}
+                  step={0.25}
+                  value={phase1Latitude}
+                  onChange={(e) => setPhase1Latitude(Number(e.target.value))}
+                  className="mt-1 block w-full rounded-lg bg-slate-950/60 border border-white/10 px-2.5 py-2 text-xs text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+
+              <label className="text-[10px] text-white/45 font-mono uppercase">
+                Longitude
+                <input
+                  type="number"
+                  min={45}
+                  max={105}
+                  step={0.25}
+                  value={phase1Longitude}
+                  onChange={(e) => setPhase1Longitude(Number(e.target.value))}
+                  className="mt-1 block w-full rounded-lg bg-slate-950/60 border border-white/10 px-2.5 py-2 text-xs text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePhase1Prediction}
+              disabled={phase1Loading || backendOnline === false}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-cyan-500/20 transition-all"
+            >
+              {phase1Loading ? 'Running XGBoost…' : backendOnline === false ? 'Backend Offline' : 'Run Phase-1 Prediction'}
+            </button>
+          </div>
+
+          {phase1Error && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {phase1Error}
+            </div>
+          )}
+
+          {phase1Result && !phase1Error && (
+            <div className="mt-5 space-y-4">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 p-3">
+                  <span className="text-[9px] uppercase font-mono text-white/40 block">Formation Probability</span>
+                  <span className="text-2xl font-black text-cyan-300">
+                    {Number.isFinite(phase1Probability) ? `${phase1Probability.toFixed(2)}%` : '—'}
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <span className="text-[9px] uppercase font-mono text-white/40 block">Prediction</span>
+                  <span className="text-sm font-black text-white">
+                    {Number(phase1Result.prediction) === 1 ? 'FORMATION' : 'NO_FORMATION'}
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <span className="text-[9px] uppercase font-mono text-white/40 block">Matched Grid</span>
+                  <span className="text-sm font-bold text-white">
+                    {String(phase1Result.grid_lat ?? '—')}°N, {String(phase1Result.grid_lon ?? '—')}°E
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <span className="text-[9px] uppercase font-mono text-white/40 block">Grid Distance</span>
+                  <span className="text-sm font-bold text-white">
+                    {Number.isFinite(Number(phase1Result.grid_distance_deg))
+                      ? `${Number(phase1Result.grid_distance_deg).toFixed(3)}°`
+                      : '—'}
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <span className="text-[9px] uppercase font-mono text-white/40 block">Risk</span>
+                  <span className="text-sm font-black text-cyan-300">
+                    {String(phase1Result.risk ?? '—')}
+                  </span>
+                </div>
+              </div>
+
+              {phase1Features && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+                  {(
+                    [
+                      ['SST', phase1Features.sst, '°C'],
+                      ['SSS', phase1Features.sss, 'PSU'],
+                      ['SSH', phase1Features.ssh, ''],
+                      ['U Wind', phase1Features.u_wind, ''],
+                      ['V Wind', phase1Features.v_wind, ''],
+                      ['Current U', phase1Features.current_u, ''],
+                      ['Current V', phase1Features.current_v, ''],
+                      ['Δ SST', phase1Features.delta_sst, ''],
+                      ['Δ Current U', phase1Features.delta_current_u, ''],
+                      ['Δ Current V', phase1Features.delta_current_v, ''],
+                    ] as Array<[string, number | undefined, string]>
+                  ).map(([label, value, unit]) => (
+                    <div key={label} className="rounded-lg bg-black/20 border border-white/5 px-2.5 py-2">
+                      <span className="block text-[8px] uppercase font-mono text-white/35">{label}</span>
+                      <span className="text-xs font-mono font-bold text-white/80">
+                        {Number.isFinite(Number(value)) ? Number(value).toFixed(4) : '—'} {unit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!phase1Result && !phase1Error && (
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/45">
+              Ready. Run a real Phase-1 inference for the selected date and location.
+            </div>
+          )}
+        </div>
 
         {/* ── Top Active System Threat Alert Banner ── */}
         <div className="p-4 rounded-2xl glass border border-red-500/30 bg-gradient-to-r from-red-950/40 via-orange-950/20 to-black/50 depth-shadow mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -825,13 +1612,11 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-black text-base tracking-tight">
-                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                    Active Monitored Cyclone: Deep Threat BOB-02
-                  </span>
+                <h2 className="font-black text-base tracking-tight text-white drop-shadow-sm">
+                  Active Monitored Cyclone: Deep Threat BOB-02
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-red-500/25 text-red-300 font-mono text-[10px] font-bold border border-red-500/40">
-                  76% RAPID INTENSIFICATION PROBABILITY
+{Number.isFinite(phase1Probability) ? `${phase1Probability.toFixed(1)}% BACKEND FORMATION PROBABILITY` : 'PHASE-1 BACKEND READY'}
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[10px]">
                   7-DAY EARLY WARNING PROTOCOL
@@ -866,15 +1651,12 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
           {[
             { id: 'simulation', label: '7-Day World Map Simulation & Warning Protocol', icon: Globe },
             { id: 'comparison', label: 'Past Cyclone vs Current Data Graphs', icon: BarChart2 },
-            { id: 'parameters', label: 'Subsurface OHC Physics & AI Predictors', icon: Zap },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === id
-                  ? 'bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border border-cyan-500/50 shadow-md shadow-cyan-500/10'
-                  : 'text-white/60 hover:text-white hover:bg-white/5 border border-transparent'
+              className={`cyclone-segment flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === id ? 'cyclone-tab-active' : ''
               }`}
             >
               <Icon size={14} className={activeTab === id ? 'text-cyan-400' : 'text-white/40'} />
@@ -888,6 +1670,109 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
         ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'simulation' && (
           <div className="space-y-6">
+            {/* ── Historical Date Search ── */}
+            <div className="glass rounded-3xl p-5 border border-cyan-500/30 depth-shadow space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                      <Clock size={16} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-white">Historical Cyclone Replay</h3>
+                      <p className="text-[11px] text-white/55">
+                        Select any date in the historical dataset to check whether a cyclone was present.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[9px] uppercase tracking-wider text-white/45">Historical date</span>
+                    <input
+                      type="date"
+                      value={historicalSelectedDate}
+                      min="2018-01-01"
+                      max="2025-12-31"
+                      onChange={(event) => {
+                        setHistoricalSelectedDate(event.target.value);
+                        setHistoricalCandidates([]);
+                        setHistoricalNoCyclone(false);
+                        setHistoricalSearchError(null);
+                        setHistoricalTrack([]);
+                        setSimulationWarning(null);
+                      }}
+                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400/60"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleHistoricalDateSearch}
+                    disabled={historicalSearchLoading || backendOnline === false || !historicalSelectedDate}
+                    className="cyclone-primary px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {historicalSearchLoading ? 'Checking…' : 'Check Date'}
+                  </button>
+                </div>
+              </div>
+
+              {historicalSearchError && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {historicalSearchError}
+                </div>
+              )}
+
+              {historicalNoCyclone && !historicalSearchError && (
+                <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 flex items-start gap-3">
+                  <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 mt-0.5">
+                    <AlertTriangle size={16} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>No historical cyclone found</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase font-bold">
+                        Dataset Notice
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-amber-100/80 mt-1">
+                      No cyclone observation is present in the prepared historical track dataset for {historicalSelectedDate}.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {historicalCandidates.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-white/45">
+                    {historicalCandidates.length} cyclone{historicalCandidates.length === 1 ? '' : 's'} found on {historicalSelectedDate}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {historicalCandidates.map((candidate) => {
+                      const selected = candidate.storm_id === historicalStormId && candidate.split === historicalSplit;
+                      return (
+                        <button
+                          key={`${candidate.storm_id}-${candidate.split}`}
+                          type="button"
+                          onClick={() => handleSelectHistoricalCyclone(candidate)}
+                          className={`text-left rounded-2xl border px-4 py-3 transition-all ${selected ? 'border-cyan-400/60 bg-cyan-500/10' : 'border-white/10 bg-white/[0.03] hover:border-white/20'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs text-cyan-300">{candidate.storm_id}</span>
+                            <span className="text-[9px] uppercase text-white/40">{candidate.split}</span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-white/65">
+                            {candidate.latitude.toFixed(1)}°N, {candidate.longitude.toFixed(1)}°E
+                            {typeof candidate.wind === 'number' ? ` · ${candidate.wind.toFixed(0)} kt` : ''}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* ── 7-Day Interactive Timeline Progression Bar ── */}
             <div className="glass rounded-3xl p-5 border border-cyan-500/30 depth-shadow space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/10 pb-3">
@@ -896,10 +1781,8 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                     <Clock size={16} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm flex items-center gap-2">
-                      <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                        7-Day Cyclone Warning Forecast:
-                      </span>
+                    <h3 className="font-bold text-sm flex items-center gap-2 text-white drop-shadow-sm">
+                      <span>7-Day Cyclone Warning Forecast:</span>
                       <span className="text-cyan-300 font-mono">{currentStep.dayTitle}</span>
                     </h3>
                     <p className="text-[11px] text-sky-100/90 font-medium">
@@ -908,19 +1791,45 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {historicalStormId && (
+                    <span className="px-2.5 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-[10px] font-mono text-cyan-300">
+                      {historicalStormId} · Day +{activeDayIdx}
+                    </span>
+                  )}
+
+                  {isHistoricalReplay && (
+                    <button
+                      type="button"
+                      onClick={handleModelForecast}
+                      disabled={modelForecastLoading || backendOnline === false}
+                      className="cyclone-secondary px-3 py-1.5 rounded-xl text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {modelForecastLoading ? 'Running…' : 'Run OceanEmbed 24/48/72h'}
+                    </button>
+                  )}
+
                   <button
+                    type="button"
                     onClick={handlePlayPause}
-                    className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-500/20 cursor-pointer transition-all active:scale-95"
+                    className="cyclone-primary px-3.5 py-1.5 rounded-xl font-bold text-xs cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-md"
                   >
-                    {isPlaying ? <Pause size={13} /> : <Play size={13} />}
-                    <span>{isPlaying ? 'Pause' : 'Play 7-Day Simulation'}</span>
+                    {isPlaying ? (
+                      <Pause size={13} />
+                    ) : (
+                      <Play size={13} />
+                    )}
+                    <span>
+                      {isPlaying
+                        ? 'Pause Simulation'
+                        : 'Run 7-Day Historical Simulation'}
+                    </span>
                   </button>
 
                   <button
-                    onClick={handleResetToToday}
+                    onClick={handleResetHistoricalReplay}
                     title="Reset to Day 0 (Today)"
-                    className="p-1.5 rounded-xl btn-glass cursor-pointer text-white/60 hover:text-white"
+                    className="cyclone-secondary p-1.5 rounded-xl cursor-pointer"
                   >
                     <RotateCcw size={13} />
                   </button>
@@ -930,9 +1839,7 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                       <button
                         key={s}
                         onClick={() => setPlaySpeed(s)}
-                        className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
-                          playSpeed === s ? 'bg-cyan-500/30 text-cyan-300' : 'text-white/40 hover:text-white'
-                        }`}
+                        className={`cyclone-segment px-2 py-0.5 rounded font-bold cursor-pointer ${playSpeed === s ? 'cyclone-segment-active' : ''}`}
                       >
                         {s}x
                       </button>
@@ -940,6 +1847,67 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                   </div>
                 </div>
               </div>
+
+              {modelForecastError && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {modelForecastError}
+                </div>
+              )}
+
+              {simulationWarning && (
+                <div className="rounded-2xl border-2 border-amber-500/70 bg-gradient-to-r from-amber-950/85 via-amber-900/65 to-slate-900/90 p-4 text-amber-200 shadow-[0_0_30px_rgba(245,158,11,0.25)] backdrop-blur-xl">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 mt-0.5 animate-pulse">
+                        <AlertTriangle size={20} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-black text-sm text-white drop-shadow-sm">
+                            Historical Simulation Warning: No Cyclone Data Found
+                          </h4>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 border border-amber-500/40 uppercase font-bold">
+                            Missing Record · {historicalSelectedDate}
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-100/90 leading-relaxed font-medium">
+                          {simulationWarning}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleForceStandardSimulation}
+                            className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Play size={12} />
+                            <span>Play Standard Operational 7-Day Simulation Instead</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHistoricalSelectedDate('2019-05-01');
+                              setHistoricalCandidates([]);
+                              setHistoricalNoCyclone(false);
+                              setSimulationWarning(null);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-medium transition-all cursor-pointer"
+                          >
+                            Try Cyclone Fani (2019-05-01)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSimulationWarning(null)}
+                      className="text-amber-300/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                      title="Dismiss warning"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* 8 Day Milestone Nodes */}
               <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
@@ -952,11 +1920,7 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                         setActiveDayIdx(idx);
                         setIsPlaying(false);
                       }}
-                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between gap-1.5 relative overflow-hidden ${
-                        isSelected
-                          ? 'bg-cyan-500/20 border-cyan-400 shadow-lg shadow-cyan-500/20'
-                          : 'bg-white/5 border-white/10 hover:bg-white/10 text-white/60'
-                      }`}
+                      className={`cyclone-segment ${isSelected ? 'cyclone-day-active' : 'cyclone-day-idle'} p-2.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 relative overflow-hidden`}
                     >
                       {step.isRapidIntensificationTrigger && (
                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping" />
@@ -989,10 +1953,10 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
               <div className="lg:col-span-7 space-y-4">
                 <div className="glass rounded-3xl border border-cyan-500/30 depth-shadow overflow-hidden">
                   {/* Map Controls Header */}
-                  <div className="p-3.5 border-b border-white/10 bg-white/95 border-b border-slate-200 text-slate-800 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="cyclone-map-header p-3.5 border-b border-white/10 flex flex-wrap items-center justify-between gap-2.5 text-xs">
                     <div className="flex items-center gap-2">
                       <IndiaFlag className="w-4 h-3 rounded-sm shadow-sm" />
-                      <span className="font-bold text-white flex items-center gap-1.5">
+                      <span className="font-bold text-white/90 flex items-center gap-1.5">
                         <Compass size={14} className="text-cyan-400" />
                         Live Map Track &amp; Vortex Simulation
                       </span>
@@ -1003,25 +1967,19 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                       <div className="flex items-center glass rounded-xl border border-white/10 p-0.5 text-[11px]">
                         <button
                           onClick={() => setMapPreset('regional')}
-                          className={`px-2 py-0.5 rounded font-medium cursor-pointer transition-all ${
-                            mapPreset === 'regional' ? 'bg-cyan-500/25 text-cyan-300' : 'text-white/50 hover:text-white'
-                          }`}
+                          className={`cyclone-segment px-2 py-0.5 rounded font-medium cursor-pointer ${mapPreset === 'regional' ? 'cyclone-segment-active' : ''}`}
                         >
                           Bay of Bengal
                         </button>
                         <button
                           onClick={() => setMapPreset('world')}
-                          className={`px-2 py-0.5 rounded font-medium cursor-pointer transition-all ${
-                            mapPreset === 'world' ? 'bg-cyan-500/25 text-cyan-300' : 'text-white/50 hover:text-white'
-                          }`}
+                          className={`cyclone-segment px-2 py-0.5 rounded font-medium cursor-pointer ${mapPreset === 'world' ? 'cyclone-segment-active' : ''}`}
                         >
                           World / Indian Ocean
                         </button>
                         <button
                           onClick={() => setMapPreset('landfall')}
-                          className={`px-2 py-0.5 rounded font-medium cursor-pointer transition-all ${
-                            mapPreset === 'landfall' ? 'bg-cyan-500/25 text-cyan-300' : 'text-white/50 hover:text-white'
-                          }`}
+                          className={`cyclone-segment px-2 py-0.5 rounded font-medium cursor-pointer ${mapPreset === 'landfall' ? 'cyclone-segment-active' : ''}`}
                         >
                           Landfall Strike
                         </button>
@@ -1030,17 +1988,13 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                       <div className="flex items-center glass rounded-xl border border-white/10 p-0.5 text-[11px]">
                         <button
                           onClick={() => setBasemapTile('satellite')}
-                          className={`px-2 py-0.5 rounded font-medium cursor-pointer transition-all ${
-                            basemapTile === 'satellite' ? 'bg-cyan-500/25 text-cyan-300' : 'text-white/50 hover:text-white'
-                          }`}
+                          className={`cyclone-segment px-2 py-0.5 rounded font-medium cursor-pointer ${basemapTile === 'satellite' ? 'cyclone-segment-active' : ''}`}
                         >
                           Satellite
                         </button>
                         <button
                           onClick={() => setBasemapTile('dark')}
-                          className={`px-2 py-0.5 rounded font-medium cursor-pointer transition-all ${
-                            basemapTile === 'dark' ? 'bg-cyan-500/25 text-cyan-300' : 'text-white/50 hover:text-white'
-                          }`}
+                          className={`cyclone-segment px-2 py-0.5 rounded font-medium cursor-pointer ${basemapTile === 'dark' ? 'cyclone-segment-active' : ''}`}
                         >
                           Dark Carto
                         </button>
@@ -1071,6 +2025,9 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                         />
                       )}
 
+                      {/* ── NIO Domain Border & 1°×1° Spatial Grid (like Map Page) ── */}
+                      <CycloneMapGrid showGrid={showGrid} />
+
                       {/* High OHC Thermal Fuel Reservoir Layer */}
                       {showOhcPool && (
                         <Circle
@@ -1093,7 +2050,7 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                       )}
 
                       {/* 7-Day Forecast Cone of Uncertainty (70% Confidence Envelope) */}
-                      {showCone && (
+                     {showCone && (
                         <Polygon
                           positions={ACTIVE_BOB_SCENARIO.conePolygon}
                           pathOptions={{
@@ -1111,18 +2068,38 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                           </LeafletTooltip>
                         </Polygon>
                       )}
+{/* ─────────────────────────────────────────────────────────────
+    REAL HISTORICAL CYCLONE TRACK
+    Solid line = actual historical observations already stored
+    in the training dataset.
+   ───────────────────────────────────────────────────────────── */}
+{pastTrackPoints.length >= 2 && (
+  <Polyline
+    positions={pastTrackPoints}
+    pathOptions={{
+      color: '#06b6d4',
+      weight: 4,
+      opacity: 0.95,
+    }}
+  />
+)}
 
-                      {/* Trajectory: Past Solid Line */}
-                      <Polyline
-                        positions={pastTrackPoints}
-                        pathOptions={{ color: '#06b6d4', weight: 4 }}
-                      />
-
-                      {/* Trajectory: Future Dashed Line */}
-                      <Polyline
-                        positions={forecastTrackPoints}
-                        pathOptions={{ color: '#f59e0b', weight: 3, dashArray: '8 6' }}
-                      />
+{/* ─────────────────────────────────────────────────────────────
+    OCEANEMBED FORECAST TRACK
+    Intentionally hidden until the real model forecast is loaded.
+    Historical observations must NEVER be shown as forecast.
+   ───────────────────────────────────────────────────────────── */}
+{forecastTrackPoints.length >= 2 && (
+  <Polyline
+    positions={forecastTrackPoints}
+    pathOptions={{
+      color: '#f59e0b',
+      weight: 3,
+      dashArray: '8 6',
+      opacity: 0.95,
+    }}
+  />
+)}
 
                       {/* Dynamic Inflow Wind Streamlines */}
                       {showStreamlines &&
@@ -1202,7 +2179,7 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                         ))}
 
                       {/* Coastal Landfall Surge Strike Target */}
-                      {showLandfallSurge && (
+                     {showLandfallSurge && (
                         <Marker
                           position={[ACTIVE_BOB_SCENARIO.targetLandfall.lat, ACTIVE_BOB_SCENARIO.targetLandfall.lon]}
                           icon={landfallImpactIcon}
@@ -1249,92 +2226,111 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                     </MapContainer>
 
                     {/* Floating Legend Overlay on Map */}
-                    <div className="absolute bottom-3 left-3 z-[1000] glass rounded-xl p-2.5 border border-white/10 text-[10px] space-y-1 backdrop-blur-md">
+                    <div className="absolute bottom-3 left-3 z-[1000] glass-dark rounded-xl p-2.5 border border-cyan-500/25 text-[10px] space-y-1.5 backdrop-blur-md">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                        <span className="text-white/70">Past Track</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 ml-2" />
-                        <span className="text-white/70">7-Day Forecast Track</span>
+                        <span className="text-white/80">Observed Track</span>
+                        <span className="w-2.5 h-0.5 border-t-2 border-dashed border-amber-400 ml-2" />
+                        <span className="text-white/80">OceanEmbed Forecast</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-orange-500/50 border border-orange-400" />
-                        <span className="text-white/70">OHC Reservoir (&gt;90 kJ/cm²)</span>
+                        <span className="text-white/80">OHC Reservoir (&gt;90 kJ/cm²)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 pt-1 border-t border-white/10 text-[9px] font-mono">
+                        <span className="w-3.5 h-0.5 border-dashed border-2 border-yellow-400 inline-block shrink-0" />
+                        <span className="text-yellow-300 font-bold">Domain Border</span>
+                        <span className="w-2.5 h-2.5 rounded-xs border border-cyan-400 bg-cyan-400/20 ml-2 inline-block shrink-0" />
+                        <span className="text-cyan-300 font-bold">1°×1° Grid</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Layer Toggles Toolbar */}
-                  <div className="p-3 bg-slate-50 border-t border-slate-200 text-slate-800 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-white/40 font-mono text-[10px]">Simulation Layers:</span>
+                  <div className="p-3.5 bg-slate-950/90 border-t border-cyan-500/25 flex flex-wrap items-center justify-between gap-2.5 text-xs backdrop-blur-md">
+                    <span className="text-cyan-300 font-mono text-[11px] font-bold tracking-wide flex items-center gap-1.5">
+                      <Layers size={13} className="text-cyan-400" />
+                      Simulation Layers:
+                    </span>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
-                        onClick={() => setShowVortex(!showVortex)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showVortex ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'glass border-white/10 text-white/40'
+                        onClick={() => setShowGrid(!showGrid)}
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showGrid ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <Wind size={11} />
-                        Satellite Vortex
+                        <Grid3X3 size={12} className={showGrid ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Spatial Grid</span>
+                      </button>
+
+                      <button
+                        onClick={() => setShowVortex(!showVortex)}
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showVortex ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
+                        }`}
+                      >
+                        <Wind size={12} className={showVortex ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Satellite Vortex</span>
                       </button>
 
                       <button
                         onClick={() => setShowStreamlines(!showStreamlines)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showStreamlines ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'glass border-white/10 text-white/40'
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showStreamlines ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <Navigation size={11} />
-                        Inflow
+                        <Navigation size={12} className={showStreamlines ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Inflow</span>
                       </button>
 
                       <button
                         onClick={() => setShowRadii(!showRadii)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showRadii ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'glass border-white/10 text-white/40'
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showRadii ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <Activity size={11} />
-                        Wind Radii
+                        <Activity size={12} className={showRadii ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Wind Radii</span>
                       </button>
 
                       <button
                         onClick={() => setShowCone(!showCone)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showCone ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'glass border-white/10 text-white/40'
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showCone ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <Layers size={11} />
-                        Cone (70%)
+                        <Layers size={12} className={showCone ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Cone (70%)</span>
                       </button>
 
                       <button
                         onClick={() => setShowOhcPool(!showOhcPool)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showOhcPool ? 'bg-orange-500/20 border-orange-500/40 text-orange-300' : 'glass border-white/10 text-white/40'
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showOhcPool ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <Sparkles size={11} />
-                        OHC Fuel Pool
+                        <Sparkles size={12} className={showOhcPool ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>OHC Fuel Pool</span>
                       </button>
 
                       <button
                         onClick={() => setShowRadarSweeps(!showRadarSweeps)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showRadarSweeps ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'glass border-white/10 text-white/40'
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showRadarSweeps ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <Radio size={11} />
-                        Doppler DWR
+                        <Radio size={12} className={showRadarSweeps ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Doppler DWR</span>
                       </button>
 
                       <button
                         onClick={() => setShowLandfallSurge(!showLandfallSurge)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          showLandfallSurge ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'glass border-white/10 text-white/40'
+                        className={`cyclone-segment flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          showLandfallSurge ? 'cyclone-toggle-on' : 'cyclone-toggle-off'
                         }`}
                       >
-                        <MapPin size={11} />
-                        Landfall Surge
+                        <MapPin size={12} className={showLandfallSurge ? 'text-cyan-300' : 'text-white/50'} />
+                        <span>Landfall Surge</span>
                       </button>
                     </div>
                   </div>
@@ -1351,10 +2347,8 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                         <IndiaFlag className="w-3.5 h-2.5 rounded-xs" />
                         IMD OFFICIAL CYCLONE BULLETIN
                       </div>
-                      <h3 className="font-extrabold text-base mt-0.5">
-                        <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                          {currentStep.dayTitle}
-                        </span>
+                      <h3 className="font-extrabold text-base mt-0.5 text-white drop-shadow-sm">
+                        {currentStep.dayTitle}
                       </h3>
                       <p className="text-xs text-sky-100/90 font-medium">{currentStep.categoryName}</p>
                     </div>
@@ -1453,7 +2447,12 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
             </div>
 
             {/* ── Multi-Hazard Atmospheric Cockpit Simulator ── */}
-            <CycloneCockpitSimulator scenario={ACTIVE_BOB_SCENARIO} activeWaypoint={currentStep} />
+            {!isHistoricalReplay && (
+              <CycloneCockpitSimulator
+                scenario={ACTIVE_BOB_SCENARIO}
+                activeWaypoint={currentStep}
+              />
+            )}
           </div>
         )}
 
@@ -1468,10 +2467,8 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                 <div>
                   <div className="flex items-center gap-2">
                     <BarChart2 size={18} className="text-cyan-400" />
-                    <h3 className="font-black text-base tracking-tight">
-                      <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                        Cyclone Intensification Trajectory: Current BOB-02 vs Historical Super Cyclones
-                      </span>
+                    <h3 className="font-black text-base tracking-tight text-white drop-shadow-sm">
+                      Cyclone Intensification Trajectory: Current BOB-02 vs Historical Super Cyclones
                     </h3>
                   </div>
                   <p className="text-xs text-sky-100/90 font-medium mt-0.5">
@@ -1483,20 +2480,16 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
                 <div className="flex items-center glass rounded-xl border border-white/10 p-0.5 self-start sm:self-auto text-xs">
                   <button
                     onClick={() => setComparisonMetric('wind')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                      comparisonMetric === 'wind'
-                        ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/40'
-                        : 'text-white/50 hover:text-white'
+                    className={`cyclone-segment px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      comparisonMetric === 'wind' ? 'cyclone-segment-active' : ''
                     }`}
                   >
                     Wind Speed (km/h)
                   </button>
                   <button
                     onClick={() => setComparisonMetric('pressure')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                      comparisonMetric === 'pressure'
-                        ? 'bg-blue-500/30 text-blue-300 border border-blue-500/40'
-                        : 'text-white/50 hover:text-white'
+                    className={`cyclone-segment px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      comparisonMetric === 'pressure' ? 'cyclone-segment-active' : ''
                     }`}
                   >
                     Central Pressure (hPa)
@@ -1641,11 +2634,9 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
             <div className="glass rounded-3xl p-6 border border-white/10 depth-shadow space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/10 pb-3">
                 <div>
-                  <h3 className="font-black text-base flex items-center gap-2">
+                  <h3 className="font-black text-base flex items-center gap-2 text-white drop-shadow-sm">
                     <Zap size={16} className="text-orange-400" />
-                    <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                      Physical Heat Potential &amp; Coastal Impact Comparison
-                    </span>
+                    <span>Physical Heat Potential &amp; Coastal Impact Comparison</span>
                   </h3>
                   <p className="text-xs text-sky-100/90 font-medium mt-0.5">
                     Benchmarking Ocean Heat Content (OHC), 26°C Isotherm Depth (D26), Peak Wind, and Storm Surge
@@ -1743,106 +2734,8 @@ export default function CyclonePage({ embedded = false }: { embedded?: boolean }
             </div>
           </div>
         )}
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB 3: SUBSURFACE OHC PHYSICS & AI PREDICTORS
-        ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'parameters' && (
-          <div className="space-y-6">
-            <div className="glass rounded-3xl p-6 border border-cyan-500/30 depth-shadow space-y-3">
-              <div className="flex items-center gap-2 text-cyan-400">
-                <Zap size={18} />
-                <h3 className="font-black text-base">
-                  <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                    Why 0–1000m Subsurface Profile is Crucial for Cyclone Forecasting
-                  </span>
-                </h3>
-              </div>
-              <p className="text-xs text-sky-100/90 font-medium leading-relaxed max-w-4xl">
-                Traditional weather satellites only observe the sea surface skin (top 1 millimeter). When a cyclone passes over water, 
-                its 150+ km/h winds produce intense cyclonic suction (Ekman pumping), violently churning the upper 100 meters. 
-                If warm water only exists as a thin surface skin, this upwelling immediately chills the ocean surface and extinguishes the cyclone. 
-                However, if the ocean holds high <strong>Ocean Heat Content (OHC) down to 100 meters</strong>, the upwelled water remains boiling warm (&gt;26°C), 
-                acting as an explosive thermodynamic afterburner that triggers <strong>Rapid Intensification (RI)</strong>.
-              </p>
-            </div>
-
-            {/* 5 Physical Parameter Breakdown Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {PREDICTION_PARAMETERS.map((p) => {
-                const Icon = p.icon;
-                return (
-                  <div
-                    key={p.id}
-                    className={`rounded-2xl p-5 border ${p.border} ${p.bg} backdrop-blur-xl space-y-3 flex flex-col justify-between`}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center">
-                          <Icon size={16} className={p.color} />
-                        </div>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/50 text-white/70 border border-white/10">
-                          {p.role}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-white text-sm">{p.name}</h4>
-                      <p className="text-xs text-white/60 leading-relaxed">{p.desc}</p>
-                    </div>
-
-                    <div className="pt-3 border-t border-white/10 space-y-1">
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-white/40">Critical Threshold:</span>
-                        <span className={`font-mono font-bold ${p.color}`}>{p.threshold}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Subsurface Neural Reconstruction Explainer */}
-            <div className="glass rounded-3xl p-6 border border-white/10 depth-shadow space-y-3">
-              <h4 className="font-bold text-sm flex items-center gap-2">
-                <Info size={16} className="text-cyan-400" />
-                <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent drop-shadow-sm">
-                  How OCEANINTEL Reconstructs 0–1000m Profiles to Outperform Baseline Models
-                </span>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-white/70 leading-relaxed pt-2">
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-cyan-300">
-                    <CheckCircle2 size={14} className="text-cyan-400" />
-                    1. Multi-Satellite Fusion
-                  </div>
-                  <p className="text-white/60">
-                    Merges altimetry Sea Surface Height Anomaly (SSHA) with microwave SST and surface winds to infer subsurface thermocline displacement.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-cyan-300">
-                    <CheckCircle2 size={14} className="text-cyan-400" />
-                    2. Deep Neural Reconstruction
-                  </div>
-                  <p className="text-white/60">
-                    Trained against 25 years of in-situ ARGO float profiles to solve the inverse radiative transfer equation down to 1000m with zero latency.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-cyan-300">
-                    <CheckCircle2 size={14} className="text-cyan-400" />
-                    3. 48-Hour RI Early Warning
-                  </div>
-                  <p className="text-white/60">
-                    Enables disaster authorities to issue mass evacuation directives 48 hours earlier than legacy numerical weather models.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </PageContainer>
+    </div>
   );
 
   if (embedded) {

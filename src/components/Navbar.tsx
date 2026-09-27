@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  Waves, Flame, MessageSquare, LayoutDashboard, Globe, Wind,
-  Thermometer, FileText, Shield, BarChart2, LogOut,
-  Menu, X, CheckSquare, Map, Calendar, GitCompare,
-  Search, Compass, Sparkles
+  Waves, MessageSquare, LayoutDashboard, Globe,
+  FileText, Shield, LogOut, Menu, X, Map,
+  Calendar, Search, Sparkles, BrainCircuit
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,8 +14,7 @@ const NAV_ITEMS = [
   { to: '/profile-3d', label: '3D Profile', icon: Globe },
   { to: '/predictions', label: 'Predictions', icon: Sparkles },
   { to: '/forecast', label: 'Forecast', icon: Calendar },
-  { to: '/compare', label: 'Compare', icon: GitCompare },
-  { to: '/validation', label: 'Validation', icon: CheckSquare },
+  { to: '/embeddings', label: 'Embeddings', icon: BrainCircuit },
   { to: '/gov', label: 'Gov Command', icon: Shield },
   { to: '/docs', label: 'Docs', icon: FileText, requiresAuth: true },
   { to: '/chat', label: 'X AI', icon: MessageSquare },
@@ -48,8 +46,8 @@ export default function Navbar() {
     else if (q.includes('surf') || q.includes('sst')) navigate('/dashboard?subpage=surface');
     else if (q.includes('3d') || q.includes('profile') || q.includes('depth')) navigate('/profile-3d');
     else if (q.includes('fore') || q.includes('week')) navigate('/forecast');
-    else if (q.includes('valid') || q.includes('argo')) navigate('/validation');
-    else if (q.includes('model') || q.includes('cnn') || q.includes('swin')) navigate('/compare');
+    else if (q.includes('embed') || q.includes('vector') || q.includes('manifold') || q.includes('latent') || q.includes('pca') || q.includes('tsne')) navigate('/embeddings');
+    else if (q.includes('valid') || q.includes('argo') || q.includes('model') || q.includes('cnn') || q.includes('swin') || q.includes('compare')) navigate('/embeddings?tab=overview');
     else if (q.includes('ai') || q.includes('chat')) navigate('/chat');
     else navigate('/dashboard');
     setSearchQuery('');

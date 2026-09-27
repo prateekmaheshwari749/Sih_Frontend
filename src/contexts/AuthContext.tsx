@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isResearcher,
       isAdmin,
       canAccessGov: isGovernment,
-      canAccessDocs: isResearcher,
+      canAccessDocs: isResearcher || isGovernment,
     }}>
       {children}
     </AuthContext.Provider>

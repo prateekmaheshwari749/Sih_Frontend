@@ -819,7 +819,7 @@ export default function WorldMapPage() {
             onMouseDown={e => e.stopPropagation()}
             className="absolute top-4 left-4 z-[1000] w-[285px] sm:w-[315px] pointer-events-auto flex flex-col max-h-[calc(100vh-120px)] animate-in fade-in slide-in-from-left-4 duration-200"
           >
-            <div className="bg-[#f0f4f9]/92 backdrop-blur-2xl border border-white/80 shadow-2xl rounded-3xl p-3.5 sm:p-4 flex flex-col overflow-hidden">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/40 shadow-2xl rounded-3xl p-3.5 sm:p-4 flex flex-col overflow-hidden">
               {/* Card Header */}
               <div className="flex items-center justify-between pb-3 px-1 border-b border-slate-200/60">
                 <div className="flex items-center gap-2">
@@ -860,8 +860,8 @@ export default function WorldMapPage() {
                       }}
                       className={`w-full text-left p-3.5 px-4 rounded-2xl transition-all cursor-pointer block ${
                         isSelected
-                          ? 'bg-blue-50/90 border-2 border-blue-500 shadow-md ring-2 ring-blue-500/20'
-                          : 'bg-white hover:bg-white/95 border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-slate-200'
+                          ? 'bg-blue-50/50 border-2 border-blue-500 shadow-md ring-2 ring-blue-500/20 backdrop-blur-md'
+                          : 'bg-white/30 hover:bg-white/50 border border-white/40 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-white/60 backdrop-blur-md'
                       }`}
                     >
                       <span className={`font-bold block text-[13px] leading-snug ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
@@ -884,7 +884,7 @@ export default function WorldMapPage() {
               e.stopPropagation();
               setPresetsOpen(true);
             }}
-            className="absolute top-24 left-0 z-[1000] pointer-events-auto flex items-center gap-2.5 py-3 px-3.5 rounded-r-2xl bg-white/95 backdrop-blur-xl border-y border-r border-slate-200 shadow-2xl text-slate-800 font-bold text-xs hover:bg-white hover:text-[#005088] transition-all cursor-pointer group animate-in fade-in slide-in-from-left-2 duration-150"
+            className="absolute top-24 left-0 z-[1000] pointer-events-auto flex items-center gap-2.5 py-3 px-3.5 rounded-r-2xl bg-white/30 backdrop-blur-xl border-y border-r border-white/40 shadow-2xl text-slate-800 font-bold text-xs hover:bg-white hover:text-[#005088] transition-all cursor-pointer group animate-in fade-in slide-in-from-left-2 duration-150"
             title="Open Preset Locations"
           >
             <div className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center text-amber-500 shadow-2xs group-hover:scale-110 transition-transform">
@@ -910,7 +910,7 @@ export default function WorldMapPage() {
             presetsOpen ? 'left-4 sm:left-[340px] right-4 sm:right-auto' : 'left-4 right-4 sm:right-auto'
           }`}
         >
-          <div className="bg-white/92 backdrop-blur-xl border border-white/80 shadow-lg rounded-2xl p-2 px-3 flex flex-wrap items-center gap-2 text-xs text-slate-700">
+          <div className="bg-white/35 backdrop-blur-2xl border border-white/40 shadow-lg rounded-2xl p-2 px-3 flex flex-wrap items-center gap-2 text-xs text-slate-700">
             {/* Quick Presets Toggle Button in Top Bar */}
             <button
               onClick={e => {
@@ -998,23 +998,6 @@ export default function WorldMapPage() {
   <span>{showGrid ? 'Grid ON' : 'Grid OFF'}</span>
 </button>
 
-{/* Date selector */}
-<div
-  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100/80 border border-slate-200 text-slate-700 text-xs font-semibold transition-all hover:bg-white hover:border-cyan-300"
-  title="Select map date"
->
-  <Calendar size={13} className="text-cyan-600 shrink-0" />
-
-  <input
-    type="date"
-    value={selectedDate}
-    min="2023-01-01"
-    max={new Date().toISOString().split('T')[0]}
-    onChange={e => setSelectedDate(e.target.value)}
-    className="bg-transparent border-none outline-none text-slate-700 text-xs font-semibold cursor-pointer"
-  />
-</div>
-
             {/* Clear pin */}
             {pin && (
               <button
@@ -1051,7 +1034,7 @@ export default function WorldMapPage() {
               presetsOpen ? 'left-4 sm:left-[340px]' : 'left-4'
             }`}
           >
-            <div className="bg-white/95 backdrop-blur-2xl border border-slate-200 shadow-2xl rounded-3xl p-4 sm:p-5 text-slate-800 space-y-3.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/40 shadow-2xl rounded-3xl p-4 sm:p-5 text-slate-800 space-y-3.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
               {/* Header */}
               <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">

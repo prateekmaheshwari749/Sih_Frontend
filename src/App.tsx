@@ -1,4 +1,4 @@
-import {
+import React, {
   Suspense,
   lazy,
   type ComponentType,
@@ -36,7 +36,7 @@ import LoginPage from './pages/LoginPage';
 // Handles stale Vite chunks / optimize-deps refreshes.
 // ================================================================
 
-function lazyWithRetry<T extends ComponentType<any>>(
+function lazyWithRetry<T extends ComponentType<Record<string, unknown>>>(
   factory: () => Promise<{ default: T }>
 ) {
   return lazy(async () => {
@@ -120,14 +120,6 @@ const MapPage = lazyWithRetry(
   () => import('./pages/MapPage')
 );
 
-const CyclonePage = lazyWithRetry(
-  () => import('./pages/CyclonePage')
-);
-
-const SurfacePage = lazyWithRetry(
-  () => import('./pages/SurfacePage')
-);
-
 const Profile3DPage = lazyWithRetry(
   () => import('./pages/Profile3DPage')
 );
@@ -140,24 +132,12 @@ const GovPortalPage = lazyWithRetry(
   () => import('./pages/GovPortalPage')
 );
 
-const ValidationPage = lazyWithRetry(
-  () => import('./pages/ValidationPage')
-);
-
 const ForecastPage = lazyWithRetry(
   () => import('./pages/ForecastPage')
 );
 
-const ModelComparisonPage = lazyWithRetry(
-  () => import('./pages/ModelComparisonPage')
-);
-
-const OceanHeatPage = lazyWithRetry(
-  () => import('./pages/OceanHeatPage')
-);
-
-const SeasonalPredictionPage = lazyWithRetry(
-  () => import('./pages/SeasonalPredictionPage')
+const EmbeddingPage = lazyWithRetry(
+  () => import('./pages/EmbeddingPage')
 );
 
 const PredictionsPage = lazyWithRetry(
@@ -336,14 +316,25 @@ export default function App() {
                   />
 
                   {/* =================================================
-                      MODEL COMPARISON
+                      OCEAN EMBEDDINGS & MODEL VALIDATION (UNIFIED)
                      ================================================= */}
 
                   <Route
-                    path="/compare"
+                    path="/embeddings"
                     element={oceanPage(
-                      <ModelComparisonPage />
+                      <EmbeddingPage />
                     )}
+                  />
+
+                  {/* Legacy Comparison Routes Redirect to Unified Embeddings */}
+                  <Route
+                    path="/compare"
+                    element={<Navigate to="/embeddings" replace />}
+                  />
+
+                  <Route
+                    path="/embedding"
+                    element={<Navigate to="/embeddings" replace />}
                   />
 
                   {/* =================================================
@@ -374,15 +365,9 @@ export default function App() {
                     element={<Navigate to="/predictions?tab=seasonal" replace />}
                   />
 
-                  {/* =================================================
-                      VALIDATION
-                     ================================================= */}
-
                   <Route
                     path="/validation"
-                    element={oceanPage(
-                      <ValidationPage />
-                    )}
+                    element={<Navigate to="/embeddings?tab=overview" replace />}
                   />
 
                   {/* =================================================

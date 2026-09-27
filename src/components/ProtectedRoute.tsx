@@ -33,7 +33,7 @@ export default function ProtectedRoute({
               {requiresGovernment
                 ? 'The Government Emergency Operations Portal is restricted to verified disaster response personnel (NDMA/IMD).'
                 : requiresDocs
-                ? 'Technical Architecture and Model Specifications are restricted to Research Scientists and ML Engineers.'
+                ? 'Technical Architecture and Model Specifications are restricted to Government Officials and Research Scientists.'
                 : 'Authentication is required to access this portal.'}
             </p>
 
@@ -53,16 +53,28 @@ export default function ProtectedRoute({
               )}
 
               {requiresDocs && (
-                <button
-                  onClick={() => {
-                    quickLogin('researcher');
-                  }}
-                  className="w-full btn-primary-cyan flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-pointer shadow-lg shadow-purple-500/20"
-                  style={{ background: 'linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)', borderColor: '#c084fc' }}
-                >
-                  <FileText size={16} />
-                  Authenticate as Research Scientist (1-Click)
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      quickLogin('government');
+                    }}
+                    className="w-full btn-primary-cyan flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-pointer shadow-lg shadow-yellow-500/20"
+                    style={{ background: 'linear-gradient(180deg, #eab308 0%, #ca8a04 100%)', borderColor: '#fde047' }}
+                  >
+                    <Shield size={16} />
+                    Authenticate as NDMA Officer (1-Click)
+                  </button>
+                  <button
+                    onClick={() => {
+                      quickLogin('researcher');
+                    }}
+                    className="w-full btn-primary-cyan flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-pointer shadow-lg shadow-purple-500/20"
+                    style={{ background: 'linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)', borderColor: '#c084fc' }}
+                  >
+                    <FileText size={16} />
+                    Authenticate as Research Scientist (1-Click)
+                  </button>
+                </div>
               )}
 
               <button
@@ -132,7 +144,7 @@ export default function ProtectedRoute({
   }
 
   // Logged in but wrong role for technical documentation
-  if (requiresDocs && !isResearcher) {
+  if (requiresDocs && !isResearcher && !isGovernment) {
     return (
       <PageLayout>
         <div className="flex items-center justify-center min-h-[calc(100vh-140px)] py-12">
@@ -141,12 +153,21 @@ export default function ProtectedRoute({
               <FileText size={28} className="text-purple-400" />
             </div>
 
-            <h2 className="text-2xl font-bold text-white mb-2">Researcher Clearance Required</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">Government / Researcher Clearance Required</h2>
             <p className="text-white/50 text-xs sm:text-sm mb-6 leading-relaxed">
-              The Technical Documentation and Model Tensor specifications are restricted to authorized Research Scientists and ML Engineers.
+              The Technical Documentation and Model Tensor specifications are restricted to authorized Government Officials, Disaster Authorities, and Research Scientists.
             </p>
 
             <div className="space-y-3">
+              <button
+                onClick={() => quickLogin('government')}
+                className="w-full btn-primary-cyan flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-pointer shadow-lg shadow-yellow-500/20"
+                style={{ background: 'linear-gradient(180deg, #eab308 0%, #ca8a04 100%)', borderColor: '#fde047' }}
+              >
+                <Shield size={16} />
+                Switch to NDMA Officer (1-Click)
+              </button>
+
               <button
                 onClick={() => quickLogin('researcher')}
                 className="w-full btn-primary-cyan flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-pointer shadow-lg shadow-purple-500/20"
@@ -157,10 +178,10 @@ export default function ProtectedRoute({
               </button>
 
               <button
-                onClick={() => navigate('/login?role=researcher')}
+                onClick={() => navigate('/login')}
                 className="w-full btn-glass flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white cursor-pointer"
               >
-                Sign In with Research Credentials
+                Sign In with Authorized Credentials
               </button>
 
               <button

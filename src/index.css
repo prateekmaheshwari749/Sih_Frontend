@@ -2238,3 +2238,334 @@ html.light .border-slate-700\/90 {
 .animate-slide-down {
   animation: slide-down 0.3s ease-out forwards;
 }
+
+/* ============================================================
+   PROFILE 3D HUD (DARK CANVAS SCOPE)
+   ============================================================ */
+.profile-3d-scope,
+html.light .profile-3d-scope {
+  color: #ffffff;
+}
+
+.profile-3d-scope .text-white,
+html.light .profile-3d-scope .text-white {
+  color: #ffffff !important;
+}
+
+.profile-3d-scope .bg-white\/15,
+html.light .profile-3d-scope .bg-white\/15 {
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.profile-3d-scope .bg-white\/\[0\.08\],
+html.light .profile-3d-scope .bg-white\/\[0\.08\] {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.profile-3d-scope .bg-white\/\[0\.05\],
+html.light .profile-3d-scope .bg-white\/\[0\.05\] {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.profile-3d-scope input,
+html.light .profile-3d-scope input {
+  background-color: rgba(0, 0, 0, 0.50) !important;
+  color: #38bdf8 !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+}
+
+.profile-3d-scope input::placeholder,
+html.light .profile-3d-scope input::placeholder {
+  color: rgba(255, 255, 255, 0.40) !important;
+}
+
+/* ============================================================
+   PREDICTIONS SUITE, CYCLONE, OCEAN HEAT & SEASONAL (LIGHT/WHITE THEME)
+   Guarantees that on Predictions page and all embedded subpages,
+   cards, panels, gauges, tables, and text adopt the clean white theme
+   matching Dashboard, Gov Portal, and Docs.
+   ============================================================ */
+
+/* Base Light Container Styles */
+html.light .predictions-scope,
+html.light .cyclone-shell,
+html.light .cyclone-scope,
+html.light .oceanheat-shell,
+html.light .seasonal-shell {
+  color: #0f172a;
+}
+
+/* Force clean white card styling on glass panels */
+html.light .predictions-scope .glass,
+html.light .cyclone-shell .glass,
+html.light .cyclone-scope .glass,
+html.light .oceanheat-shell .glass,
+html.light .seasonal-shell .glass,
+html.light .predictions-scope .glass-dark,
+html.light .cyclone-shell .glass-dark,
+html.light .cyclone-scope .glass-dark,
+html.light .oceanheat-shell .glass-dark,
+html.light .seasonal-shell .glass-dark,
+html.light .predictions-scope .glass-strong,
+html.light .cyclone-shell .glass-strong,
+html.light .cyclone-scope .glass-strong,
+html.light .oceanheat-shell .glass-strong,
+html.light .seasonal-shell .glass-strong,
+html.light .predictions-scope .glass-panel,
+html.light .cyclone-shell .glass-panel,
+html.light .cyclone-scope .glass-panel,
+html.light .oceanheat-shell .glass-panel,
+html.light .seasonal-shell .glass-panel {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Dark utility backgrounds overridden to crisp white/light */
+html.light .predictions-scope .bg-slate-900\/85,
+html.light .predictions-scope .bg-slate-950\/70,
+html.light .predictions-scope .bg-slate-950\/80,
+html.light .predictions-scope .bg-slate-900\/80,
+html.light .predictions-scope .bg-slate-950\/90,
+html.light .predictions-scope .bg-\[\#020d1f\]\/95,
+html.light .cyclone-scope .bg-slate-900\/85,
+html.light .cyclone-scope .bg-slate-950\/70,
+html.light .cyclone-scope .bg-slate-950\/80,
+html.light .cyclone-shell .bg-slate-900\/85,
+html.light .cyclone-shell .bg-slate-950\/70,
+html.light .cyclone-shell .bg-slate-950\/80,
+html.light .oceanheat-shell .bg-slate-900\/85,
+html.light .oceanheat-shell .bg-slate-950\/70,
+html.light .oceanheat-shell .bg-slate-950\/80,
+html.light .seasonal-shell .bg-slate-900\/85,
+html.light .seasonal-shell .bg-slate-950\/70,
+html.light .seasonal-shell .bg-slate-950\/80 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Light Mode Text Headings & Hierarchy */
+html.light .predictions-scope h1,
+html.light .predictions-scope h2,
+html.light .predictions-scope h3,
+html.light .predictions-scope h4,
+html.light .cyclone-shell h1,
+html.light .cyclone-shell h2,
+html.light .cyclone-shell h3,
+html.light .cyclone-shell h4,
+html.light .cyclone-scope h1,
+html.light .cyclone-scope h2,
+html.light .cyclone-scope h3,
+html.light .cyclone-scope h4,
+html.light .oceanheat-shell h1,
+html.light .oceanheat-shell h2,
+html.light .oceanheat-shell h3,
+html.light .oceanheat-shell h4,
+html.light .seasonal-shell h1,
+html.light .seasonal-shell h2,
+html.light .seasonal-shell h3,
+html.light .seasonal-shell h4 {
+  color: #0f172a !important;
+}
+
+html.light .predictions-scope .text-white,
+html.light .cyclone-shell .text-white,
+html.light .cyclone-scope .text-white,
+html.light .oceanheat-shell .text-white,
+html.light .seasonal-shell .text-white {
+  color: #0f172a !important;
+}
+
+html.light .predictions-scope .text-white\/90,
+html.light .cyclone-shell .text-white\/90,
+html.light .cyclone-scope .text-white\/90,
+html.light .oceanheat-shell .text-white\/90,
+html.light .seasonal-shell .text-white\/90,
+html.light .predictions-scope .text-white\/80,
+html.light .cyclone-shell .text-white\/80,
+html.light .cyclone-scope .text-white\/80,
+html.light .oceanheat-shell .text-white\/80,
+html.light .seasonal-shell .text-white\/80 {
+  color: #1e293b !important;
+}
+
+html.light .predictions-scope .text-white\/70,
+html.light .cyclone-shell .text-white\/70,
+html.light .cyclone-scope .text-white\/70,
+html.light .oceanheat-shell .text-white\/70,
+html.light .seasonal-shell .text-white\/70,
+html.light .predictions-scope .text-white\/60,
+html.light .cyclone-shell .text-white\/60,
+html.light .cyclone-scope .text-white\/60,
+html.light .oceanheat-shell .text-white\/60,
+html.light .seasonal-shell .text-white\/60,
+html.light .predictions-scope .text-white\/50,
+html.light .cyclone-shell .text-white\/50,
+html.light .cyclone-scope .text-white\/50,
+html.light .oceanheat-shell .text-white\/50,
+html.light .seasonal-shell .text-white\/50,
+html.light .cyclone-shell .text-white\/55,
+html.light .cyclone-scope .text-white\/55 {
+  color: #64748b !important;
+}
+
+html.light .predictions-scope .text-slate-200,
+html.light .cyclone-shell .text-slate-200,
+html.light .oceanheat-shell .text-slate-200,
+html.light .seasonal-shell .text-slate-200,
+html.light .predictions-scope .text-slate-300,
+html.light .cyclone-shell .text-slate-300,
+html.light .oceanheat-shell .text-slate-300,
+html.light .seasonal-shell .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light .predictions-scope .text-slate-400,
+html.light .cyclone-shell .text-slate-400,
+html.light .oceanheat-shell .text-slate-400,
+html.light .seasonal-shell .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .predictions-scope .text-sky-100,
+html.light .cyclone-shell .text-sky-100,
+html.light .oceanheat-shell .text-sky-100,
+html.light .seasonal-shell .text-sky-100,
+html.light .predictions-scope .text-sky-100\/90,
+html.light .cyclone-shell .text-sky-100\/90,
+html.light .oceanheat-shell .text-sky-100\/90,
+html.light .seasonal-shell .text-sky-100\/90 {
+  color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7) !important;
+}
+
+html.light .predictions-scope .bg-white\/5,
+html.light .cyclone-shell .bg-white\/5,
+html.light .oceanheat-shell .bg-white\/5,
+html.light .seasonal-shell .bg-white\/5,
+html.light .predictions-scope .bg-white\/10,
+html.light .cyclone-shell .bg-white\/10,
+html.light .oceanheat-shell .bg-white\/10,
+html.light .seasonal-shell .bg-white\/10 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .predictions-scope .bg-black\/20,
+html.light .cyclone-shell .bg-black\/20,
+html.light .oceanheat-shell .bg-black\/20,
+html.light .seasonal-shell .bg-black\/20,
+html.light .predictions-scope .bg-black\/40,
+html.light .cyclone-shell .bg-black\/40,
+html.light .oceanheat-shell .bg-black\/40,
+html.light .seasonal-shell .bg-black\/40,
+html.light .predictions-scope .bg-black\/50,
+html.light .cyclone-shell .bg-black\/50 {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .predictions-scope input,
+html.light .cyclone-shell input,
+html.light .oceanheat-shell input,
+html.light .seasonal-shell input {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .predictions-scope input::placeholder,
+html.light .cyclone-shell input::placeholder,
+html.light .oceanheat-shell input::placeholder,
+html.light .seasonal-shell input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Secondary & Day Buttons */
+html.light .cyclone-secondary,
+html.light .cyclone-segment,
+html.light .cyclone-ghost {
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light .cyclone-secondary:hover:not(:disabled),
+html.light .cyclone-segment:hover:not(:disabled),
+html.light .cyclone-ghost:hover:not(:disabled) {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+html.light .cyclone-day-idle {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light .cyclone-day-idle:hover {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .cyclone-map-header {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Toggles */
+html.light .cyclone-toggle-off {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+/* ============================================================
+   X AI CHAT USER BUBBLE CONTRAST ENFORCEMENT
+   ============================================================ */
+
+.xai-user-bubble,
+.xai-user-bubble span,
+.xai-user-bubble p,
+.xai-user-bubble div {
+  color: #ffffff !important;
+}
+
+.xai-user-bubble strong {
+  color: #a5f3fc !important;
+  font-weight: 800 !important;
+}
+
+.xai-user-bubble .xai-timestamp {
+  color: #cffafe !important;
+}
+
+/* ============================================================
+   SATELLITE SIMULATION BANNER & HOME CONTRAST ENFORCEMENT
+   ============================================================ */
+
+.light-banner h2,
+.light-panel h2,
+html.light .light-banner h2,
+html.light .light-panel h2 {
+  color: #002f52 !important;
+  -webkit-text-fill-color: #002f52 !important;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  opacity: 1 !important;
+}
+
+.light-banner p,
+.light-panel p,
+html.light .light-banner p,
+html.light .light-panel p {
+  color: #003355 !important;
+  opacity: 1 !important;
+}
+
