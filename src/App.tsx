@@ -20,7 +20,6 @@ import {
 
 import CommonOceanBackground from './components/CommonOceanBackground';
 import XAIFloatingPopup from './components/XAIFloatingPopup';
-import BackendStatusBanner from './components/BackendStatusBanner';
 
 import './styles/ocean-page.css';
 
@@ -196,9 +195,6 @@ export default function App() {
         <BubbleClickEffect />
 
         <AuthProvider>
-
-          {/* Global backend status */}
-          <BackendStatusBanner />
 
           <DataProvider>
 

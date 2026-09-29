@@ -1076,21 +1076,8 @@ const profileLongitude = 81.0;
           subtitle={`ConvGRU Neural Prognostic Architecture · 6 Historical Input Days (${rollingDates[0]} → ${referenceDateStr}) · 7th Day Target Prediction: ${predictedDate}`}
           actions={
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => loadBackendData()}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#005088] font-mono text-xs font-bold border border-[#005088]/30 shadow-sm transition-all cursor-pointer"
-                title="Reset to today's automatic 2025 model date"
-              >
-                <RotateCcw size={13} />
-                Reset to Today
-              </button>
-              <button
-                onClick={() => loadBackendData(referenceDateStr)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-mono text-xs font-bold border border-slate-300 shadow-sm transition-all cursor-pointer"
-              >
-                <RefreshCw size={13} />
-                Refresh
-              </button>
+
+
             </div>
           }
         />
@@ -1216,14 +1203,6 @@ const profileLongitude = 81.0;
                 />
               </div>
 
-              <button
-                onClick={() => loadBackendData()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#005088] hover:bg-[#003e6b] text-white font-bold text-xs font-mono shadow-sm transition-all cursor-pointer"
-                title="Reset to today's automatic 2025 model date"
-              >
-                <RotateCcw size={12} />
-                Reset to Today
-              </button>
             </div>
           </div>
 
@@ -1371,23 +1350,6 @@ const profileLongitude = 81.0;
                       ).toFixed(1)} m/s
                     </span>
                   </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedDay(6);
-                      requestAnimationFrame(() => {
-                        document.getElementById('forecast-visual-output')?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        });
-                      });
-                    }}
-                    className="px-5 py-2.5 rounded-xl bg-[#005088] hover:bg-[#003e6b] text-white font-black text-xs shadow-md transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
-                    title="Jump to the model-generated heatmap and depth profile"
-                  >
-                    Inspect 2D Heatmap &amp; Profile <ArrowRight size={13} />
-                  </button>
                 </div>
               </div>
             </div>
@@ -1730,9 +1692,9 @@ const profileLongitude = 81.0;
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {days.map((day, index) => {
               const isPred = day.isPrediction;
-              const imageUrl = isPred
-                ? `${getHeatmapUrl(referenceDateStr, selectedDepth)}?v=${heatmapRefreshKey}`
-                : '';
+              const dayInferenceDate = isPred ? referenceDateStr : day.date;
+              const imageUrl = `${getHeatmapUrl(dayInferenceDate, selectedDepth)}?v=${heatmapRefreshKey}`;
+              const fallbackUrl = `${getHeatmapUrl(referenceDateStr, selectedDepth)}?v=${heatmapRefreshKey}`;
 
               return (
                 <button
@@ -1746,24 +1708,18 @@ const profileLongitude = 81.0;
                       : 'border-slate-700/80 bg-[#060e1f] hover:border-slate-500'
                   }`}
                 >
-                  <div className="bg-black/60 aspect-[1.8/1] flex items-center justify-center">
-                    {isPred ? (
-                      <img
-                        src={imageUrl}
-                        alt={`${selectedDepth}m model forecast heatmap for ${predictedDate}`}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="px-3 text-center">
-                        <p className="text-cyan-300 text-[10px] font-mono font-black uppercase">
-                          REAL INPUT DATA
-                        </p>
-                        <p className="text-slate-300 text-[10px] font-mono mt-1">
-                          Surface tensor loaded from backend
-                        </p>
-                      </div>
-                    )}
+                  <div className="bg-black/60 aspect-[1.8/1] flex items-center justify-center relative overflow-hidden">
+                    <img
+                      src={imageUrl}
+                      alt={`${selectedDepth}m heatmap for ${day.date}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== fallbackUrl) {
+                          e.currentTarget.src = fallbackUrl;
+                        }
+                      }}
+                    />
                   </div>
 
                   <div className="px-2.5 py-2 bg-white border-t border-slate-200 text-left">

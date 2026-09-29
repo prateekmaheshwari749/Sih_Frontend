@@ -1597,11 +1597,6 @@ const currentStep: SevenDayForecastStep = useMemo(() => {
             </div>
           )}
 
-          {!phase1Result && !phase1Error && (
-            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/45">
-              Ready. Run a real Phase-1 inference for the selected date and location.
-            </div>
-          )}
         </div>
 
         {/* ── Top Active System Threat Alert Banner ── */}
