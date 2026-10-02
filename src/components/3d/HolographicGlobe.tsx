@@ -2,7 +2,7 @@ import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-
+import type { ThreeEvent } from "@react-three/fiber";
 // Convert Lat/Lon (degrees) to 3D vector on a sphere of radius R
 export function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
@@ -310,13 +310,13 @@ export default function HolographicGlobe({
           <group key={data.id} position={pos}>
             {/* Glowing pin base */}
             <mesh
-              onClick={(e) => {
+              onClick={(e: ThreeEvent<MouseEvent>) => {
                 e.stopPropagation();
                 const next = isSelected ? null : data;
                 setActiveFloat(next);
                 onSelectFloat?.(next);
               }}
-              onPointerOver={(e) => {
+              onPointerOver={(e: ThreeEvent<PointerEvent>) => {
                 e.stopPropagation();
                 document.body.style.cursor = 'pointer';
               }}
@@ -482,7 +482,7 @@ function SatelliteNode({
       {/* Satellite Body & Solar Panels */}
       <group
         ref={satMeshRef}
-        onPointerOver={(e) => {
+        onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
           onHover(sat);
           document.body.style.cursor = 'pointer';

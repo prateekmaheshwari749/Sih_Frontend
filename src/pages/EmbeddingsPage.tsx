@@ -239,13 +239,13 @@ export default function EmbeddingsPage() {
         <div ref={contentContainerRef} className="w-full relative transition-all duration-300 pt-2">
           {activeIndex === 0 && (
             <div className="animate-in fade-in duration-200">
-              <ModelComparisonPage embedded={true} />
+              <ModelComparisonPage />
             </div>
           )}
 
           {activeIndex === 1 && (
             <div className="animate-in fade-in duration-200">
-              <ValidationPage embedded={true} />
+              <ValidationPage />
             </div>
           )}
         </div>
