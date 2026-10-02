@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-
+import type { ThreeEvent } from "@react-three/fiber";
 export interface ProfilePoint {
   depth: number;
   temperature: number;
@@ -173,12 +173,12 @@ export default function SubsurfaceColumn3D({
             {/* Slab Mesh */}
             <mesh
               scale={isActive ? [1.05, 1.2, 1.05] : [1, 1, 1]}
-              onClick={(e) => {
+              onClick={(e: ThreeEvent<MouseEvent>) => {
                 e.stopPropagation();
                 setInternalHovered(depth);
                 onSelectDepth?.(depth);
               }}
-              onPointerOver={(e) => {
+              onPointerOver={(e: ThreeEvent<PointerEvent>) => {
                 e.stopPropagation();
                 setInternalHovered(depth);
                 onSelectDepth?.(depth);
@@ -231,7 +231,7 @@ export default function SubsurfaceColumn3D({
             <Html distanceFactor={5.6} position={[2.15, 0, badgeZ]} center>
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                   e.stopPropagation();
                   setInternalHovered(depth);
                   onSelectDepth?.(depth);

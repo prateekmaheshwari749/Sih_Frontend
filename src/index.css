@@ -2562,10 +2562,18 @@ html.light .light-panel h2 {
 }
 
 .light-banner p,
-.light-panel p,
 html.light .light-banner p,
-html.light .light-panel p {
+html.light .light-panel > div:first-child p {
   color: #003355 !important;
   opacity: 1 !important;
 }
+
+/* Satellite Simulation Dossier and Profile Cards: White with Black Borders */
+.sat-white-card {
+  background-color: #ffffff !important;
+  border: 1.5px solid #000000 !important;
+  color: #000000 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+
 

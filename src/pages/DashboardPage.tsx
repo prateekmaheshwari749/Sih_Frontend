@@ -53,7 +53,6 @@ import Navbar from '../components/Navbar';
 import GovFooter from '../components/GovFooter';
 import IndiaFlag from '../components/IndiaFlag';
 import SurfaceObservationSubpage from '../components/SurfaceObservationSubpage';
-import SurfaceObservationEmbedded from '../components/SurfaceObservationEmbedded';
 import { useData } from '../contexts/DataContext';
 import { useBackendStatus } from '../api/backendConfig';
 import {
@@ -2239,18 +2238,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </section>
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 5: SURFACE SATELLITE OBSERVATIONS — EMBEDDED CONTENT ONLY
-            No PageLayout / Navbar / global header is rendered here.
-        ══════════════════════════════════════════════════════════════════════ */}
-        <section className="mt-10">
-          <SurfaceObservationEmbedded
-            date={selectedDate}
-            lat={latitude}
-            lon={longitude}
-          />
         </section>
       </main>
 

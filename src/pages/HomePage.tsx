@@ -419,7 +419,7 @@ export default function HomePage() {
                   const el = document.getElementById('satellite-sim-root');
                   el?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'sat'
+                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'depth'
                   ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
                   : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
                   }`}
@@ -434,7 +434,7 @@ export default function HomePage() {
                   const el = document.getElementById('monsoon-simulation');
                   el?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl font-bold text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'monsoon'
+                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'depth'
                   ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
                   : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
                   }`}
@@ -448,7 +448,7 @@ export default function HomePage() {
                   setActiveHeroBtn('dashboard');
                   navigate('/dashboard');
                 }}
-                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'dashboard'
+                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm transition-all duration-300 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${activeHeroBtn === 'depth'
                   ? 'bg-[#005088] text-white border border-cyan-300 shadow-[0_0_25px_rgba(0,180,255,0.5)]'
                   : 'bg-white text-[#005088] hover:bg-sky-50 border border-white'
                   }`}

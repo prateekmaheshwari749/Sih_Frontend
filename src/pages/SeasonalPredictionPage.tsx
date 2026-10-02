@@ -587,57 +587,57 @@ export default function SeasonalPredictionPage(
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 sm:gap-4 relative">
             
             {/* Step 1: 12 Months Input */}
-            <div className="p-4 rounded-xl bg-slate-950/70 border border-white/10 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-white/10 space-y-2 flex flex-col justify-between shadow-sm">
               <div>
-                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Input Feed</span>
-                <h3 className="font-bold text-sm sm:text-base text-white">12-Month Production Input Window</h3>
+                <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest block">Input Feed</span>
+                <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">12-Month Production Input Window</h3>
               </div>
-              <div className="pt-2 border-t border-white/10">
-                <p className="text-[11px] font-mono font-bold text-slate-300 flex flex-wrap gap-1">
-                  <span className="text-red-400">SST</span> &bull;
-                  <span className="text-cyan-300">SSS</span> &bull;
-                  <span className="text-sky-300">SLA</span> &bull;
-                  <span className="text-emerald-400">U</span> &bull;
-                  <span className="text-teal-300">V</span> &bull;
-                  <span className="text-purple-300">Subsurface (0–1000m)</span>
+              <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+                <p className="text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300 flex flex-wrap gap-1">
+                  <span className="text-red-500 dark:text-red-400">SST</span> &bull;
+                  <span className="text-cyan-600 dark:text-cyan-300">SSS</span> &bull;
+                  <span className="text-sky-600 dark:text-sky-300">SLA</span> &bull;
+                  <span className="text-emerald-600 dark:text-emerald-400">U</span> &bull;
+                  <span className="text-teal-600 dark:text-teal-300">V</span> &bull;
+                  <span className="text-purple-600 dark:text-purple-300">Subsurface (0–1000m)</span>
                 </p>
               </div>
             </div>
 
             {/* Step 2: Spatiotemporal FNO Model */}
-            <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-white/10 space-y-2 flex flex-col justify-between shadow-sm">
               <div>
-                <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-widest block">Neural Operator</span>
-                <h3 className="font-black text-sm sm:text-base text-cyan-300">Spatiotemporal FNO</h3>
+                <span className="text-[10px] font-mono font-bold text-sky-600 dark:text-cyan-400 uppercase tracking-widest block">Neural Operator</span>
+                <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">Spatiotemporal FNO</h3>
               </div>
-              <div className="pt-2 border-t border-cyan-500/30">
-                <p className="text-[11px] font-bold text-cyan-200">
+              <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+                <p className="text-[11px] font-medium text-slate-600 dark:text-cyan-200">
                   Spatial + Temporal Learning (Fourier Neural Operator)
                 </p>
               </div>
             </div>
 
             {/* Step 3: 3-Month Forecast */}
-            <div className="p-4 rounded-xl bg-slate-950/70 border border-white/10 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-white/10 space-y-2 flex flex-col justify-between shadow-sm">
               <div>
-                <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-widest block">Forward Output</span>
-                <h3 className="font-bold text-sm sm:text-base text-white">3-Month SST Forecast</h3>
+                <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">Forward Output</span>
+                <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">3-Month SST Forecast</h3>
               </div>
-              <div className="pt-2 border-t border-white/10">
-                <p className="text-[11px] text-slate-400">
+              <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
                   Lead Time: +1, +2, +3 Months continuous thermal evolution
                 </p>
               </div>
             </div>
 
             {/* Step 4: SST Anomaly */}
-            <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 space-y-2 flex flex-col justify-between">
+            <div className="p-4 rounded-xl bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-white/10 space-y-2 flex flex-col justify-between shadow-sm">
               <div>
-                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block">Deviation Index</span>
-                <h3 className="font-black text-sm sm:text-base text-amber-300">SST Anomaly</h3>
+                <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest block">Deviation Index</span>
+                <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">SST Anomaly</h3>
               </div>
-              <div className="pt-2 border-t border-amber-500/30">
-                <p className="text-[11px] font-mono font-bold text-amber-300">
+              <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+                <p className="text-[11px] font-mono font-medium text-slate-600 dark:text-amber-300">
                   Predicted normalized SST − monthly climatology
                 </p>
               </div>
@@ -973,12 +973,12 @@ export default function SeasonalPredictionPage(
             </div>
 
             {/* Card 03 */}
-            <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2">
-              <span className="text-xs font-mono font-black text-white bg-cyan-600 px-2 py-0.5 rounded">
+            <div className="p-4 rounded-xl glass border border-white/10 space-y-2 hover:border-cyan-500/40 transition-colors">
+              <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
                 03
               </span>
-              <h4 className="font-bold text-cyan-300 text-sm">Spatiotemporal FNO</h4>
-              <p className="text-xs text-cyan-100/90 leading-relaxed">
+              <h4 className="font-bold text-white text-sm">Spatiotemporal FNO</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Fourier Neural Operator learns continuous multi-scale temporal and spatial dynamical operators across the North Indian Ocean.
               </p>
             </div>

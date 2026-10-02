@@ -497,58 +497,62 @@ export default function MonsoonFlowSimulation() {
   ]);
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-cyan-500/20 bg-gradient-to-b from-[#031326] via-[#020b18] to-[#010711] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+    <div className="relative rounded-3xl overflow-hidden border border-sky-200 dark:border-cyan-500/20 bg-[#010b17] shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
       {/* Top Console Bar */}
-      <div className="p-5 sm:p-6 border-b border-white/10 bg-black/40 backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div
+        className="p-5 sm:p-6 border-b border-sky-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+        style={{ backgroundColor: 'rgba(248, 253, 255, 0.95)' }}
+      >
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
-            <span className="text-xs font-mono tracking-wider uppercase text-cyan-300 font-bold">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-ping" />
+            <span className="text-xs font-mono tracking-wider uppercase font-black" style={{ color: '#005088' }}>
               Hydrodynamic Surface Velocity &amp; Gyre Simulation
             </span>
-            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${activeSeason.badgeColor}`}>
+            <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full border font-bold ${activeSeason.badgeColor}`}>
               {activeSeason.badge}
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm">
-            <span className="bg-gradient-to-r from-white via-cyan-100 to-sky-200 bg-clip-text text-transparent">
-              North Indian Ocean Seasonal Circulation Engine
-            </span>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: '#002f52' }}>
+            North Indian Ocean Seasonal Circulation Engine
           </h2>
-          <p className="text-xs sm:text-sm text-sky-100/90 font-medium max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm font-semibold max-w-2xl leading-relaxed" style={{ color: '#003355' }}>
             {activeSeason.description}
           </p>
         </div>
 
         {/* Season Selector Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-2xl bg-white/5 border border-white/10 self-stretch md:self-auto justify-center">
+        <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-2xl bg-sky-50/90 border border-sky-200 self-stretch md:self-auto justify-center font-mono">
           <button
             onClick={() => setSeason('sw')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border"
+            style={
               season === 'sw'
-                ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-orange-500/20'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+                ? { backgroundColor: '#ea580c', color: '#ffffff', borderColor: '#c2410c', boxShadow: '0 4px 12px rgba(234, 88, 12, 0.3)' }
+                : { backgroundColor: '#ffffff', color: '#002f52', borderColor: '#bae6fd' }
+            }
           >
             SW Summer Monsoon
           </button>
           <button
             onClick={() => setSeason('ne')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border"
+            style={
               season === 'ne'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+                ? { backgroundColor: '#0284c7', color: '#ffffff', borderColor: '#0369a1', boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)' }
+                : { backgroundColor: '#ffffff', color: '#002f52', borderColor: '#bae6fd' }
+            }
           >
             NE Winter Monsoon
           </button>
           <button
             onClick={() => setSeason('transition')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border"
+            style={
               season === 'transition'
-                ? 'bg-gradient-to-r from-red-500 to-purple-600 text-white shadow-lg shadow-red-500/20'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+                ? { backgroundColor: '#7c3aed', color: '#ffffff', borderColor: '#6d28d9', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)' }
+                : { backgroundColor: '#ffffff', color: '#002f52', borderColor: '#bae6fd' }
+            }
           >
             Pre-Cyclone Transition
           </button>
@@ -662,30 +666,30 @@ export default function MonsoonFlowSimulation() {
       </div>
 
       {/* Physics Footer Details */}
-      <div className="p-4 sm:p-5 bg-[#010915] border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-bold text-white uppercase text-[11px] tracking-wider text-amber-300">
+      <div className="p-4 sm:p-5 border-t border-sky-100 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs" style={{ backgroundColor: 'rgba(248, 253, 255, 0.95)' }}>
+        <div className="p-3 rounded-xl bg-white border-2 border-black space-y-1 shadow-sm">
+          <p className="font-black uppercase text-[11px] tracking-wider text-amber-700">
             Somali Upwelling &amp; Reversal
           </p>
-          <p className="text-white/60 leading-relaxed">
-            The world's only seasonally reversing western boundary current. Upwelling lowers SST to &lt;20°C, enriching fisheries while modulating monsoon moisture.
+          <p className="text-slate-800 leading-relaxed font-medium" style={{ color: '#1e293b' }}>
+            The world&apos;s only seasonally reversing western boundary current. Upwelling lowers SST to &lt;20°C, enriching fisheries while modulating monsoon moisture.
           </p>
         </div>
 
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-bold text-white uppercase text-[11px] tracking-wider text-cyan-300">
+        <div className="p-3 rounded-xl bg-white border-2 border-black space-y-1 shadow-sm">
+          <p className="font-black uppercase text-[11px] tracking-wider text-[#005088]">
             Equatorial Wyrtki Jets
           </p>
-          <p className="text-white/60 leading-relaxed">
+          <p className="text-slate-800 leading-relaxed font-medium" style={{ color: '#1e293b' }}>
             Semi-annual eastward jet currents peaking during monsoon transitions (~May and ~Nov), pushing warm water into the eastern equatorial Indian Ocean.
           </p>
         </div>
 
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-bold text-white uppercase text-[11px] tracking-wider text-red-300">
+        <div className="p-3 rounded-xl bg-white border-2 border-black space-y-1 shadow-sm">
+          <p className="font-black uppercase text-[11px] tracking-wider text-red-700">
             Mesoscale Eddy Thermal Pumping
           </p>
-          <p className="text-white/60 leading-relaxed">
+          <p className="text-slate-800 leading-relaxed font-medium" style={{ color: '#1e293b' }}>
             Anticyclonic warm-core eddies depress the thermocline by up to 50m, trapping huge OHC (&gt;90 kJ/cm²) that feeds violent cyclone rapid intensification.
           </p>
         </div>
