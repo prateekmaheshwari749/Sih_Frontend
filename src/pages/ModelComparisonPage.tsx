@@ -479,6 +479,87 @@ export default function ModelComparisonPage({
         OCEAN_EMBEDDINGS_DATA[0]
       );
     });
+
+  
+    
+const selectEmbeddingCategory = (
+  category: OceanEmbeddingCategoryKey,
+) => {
+  setSelectedDomainCategory(category);
+
+  const categoryItems = searchOceanEmbeddings('', category);
+
+  const excludedNames = new Set([
+    'audit',
+    'results',
+    'result',
+    'checkpoints',
+    'checkpoint',
+    'logs',
+    'reports',
+    'documentation',
+    'docs',
+    'assets',
+    'tests',
+    'test',
+    '__pycache__',
+  ]);
+
+  const normalize = (value: string) =>
+    value.trim().toLowerCase().replace(/[_-]+/g, ' ');
+
+  const isUtilityItem = (item: OceanEmbeddingItem) => {
+    const name = normalize(item.name);
+    const path = normalize(
+      item.relative_path || item.folder_name || '',
+    )
+      .split(/[\\/]+/)
+      .filter(Boolean);
+
+    return (
+      excludedNames.has(name) ||
+      path.some(part => excludedNames.has(part))
+    );
+  };
+
+  // Prefer category-specific model names rather than generic folders.
+  const preferredTerms: Record<
+    Exclude<OceanEmbeddingCategoryKey, 'all'>,
+    RegExp
+  > = {
+    cyclone:
+      /cyclone model|forecast model|track cross attention|convgru|integrated model/i,
+    oceansubsurface:
+      /subsurface|temperature model|depth thermal|swin|specialist/i,
+    seasonal:
+      /seasonal climate|climate projection|enso|monsoon|iod|seasonal forecast/i,
+    mhw:
+      /marine heatwave|heatwave|mhw.*(unet|transformer|forecast)|3d unet|benchmark/i,
+    thermocline:
+      /thermocline specialist|thermocline model|temperature gradient/i,
+  };
+
+  const matchesPreferredName = (item: OceanEmbeddingItem) => {
+    if (category === 'all') return false;
+    return preferredTerms[category].test(item.name);
+  };
+
+  const validItems = categoryItems.filter(
+    item => !isUtilityItem(item),
+  );
+
+  const selectedItem =
+    validItems.find(matchesPreferredName) ??
+    validItems.find(item =>
+      /\b(model|forecast|training|unet|convgru|transformer|cnn|swin|specialist)\b/i
+        .test(item.name),
+    ) ??
+    validItems[0];
+
+  if (selectedItem) {
+    setInspectedFolderItem(selectedItem);
+  }
+};
   const [embeddingViewMode, setEmbeddingViewMode] =
     useState<'categories' | 'neural'>('categories');
   const [backendLiveStatus, setBackendLiveStatus] =
@@ -2715,7 +2796,7 @@ export default function ModelComparisonPage({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
               {/* Cyclone */}
               <div
-                onClick={() => setSelectedDomainCategory('cyclone')}
+                onClick={() => selectEmbeddingCategory('cyclone')}    
                 className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
                   selectedDomainCategory === 'cyclone'
                     ? 'border-orange-500 bg-orange-50/40 shadow-sm ring-1 ring-orange-500/20'
@@ -2739,7 +2820,7 @@ export default function ModelComparisonPage({
 
               {/* Subsurface */}
               <div
-                onClick={() => setSelectedDomainCategory('oceansubsurface')}
+                onClick={() => selectEmbeddingCategory('oceansubsurface')}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
                   selectedDomainCategory === 'oceansubsurface'
                     ? 'border-cyan-500 bg-cyan-50/40 shadow-sm ring-1 ring-cyan-500/20'
@@ -2763,7 +2844,7 @@ export default function ModelComparisonPage({
 
               {/* Seasonal */}
               <div
-                onClick={() => setSelectedDomainCategory('seasonal')}
+                onClick={() => selectEmbeddingCategory('seasonal')}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
                   selectedDomainCategory === 'seasonal'
                     ? 'border-emerald-500 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/20'
@@ -2787,7 +2868,7 @@ export default function ModelComparisonPage({
 
               {/* MHW */}
               <div
-                onClick={() => setSelectedDomainCategory('mhw')}
+                onClick={() => selectEmbeddingCategory('mhw')}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
                   selectedDomainCategory === 'mhw'
                     ? 'border-rose-500 bg-rose-50/40 shadow-sm ring-1 ring-rose-500/20'
@@ -2811,7 +2892,7 @@ export default function ModelComparisonPage({
 
               {/* Thermocline */}
               <div
-                onClick={() => setSelectedDomainCategory('thermocline')}
+                onClick={() => selectEmbeddingCategory('thermocline')}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs ${
                   selectedDomainCategory === 'thermocline'
                     ? 'border-purple-500 bg-purple-50/40 shadow-sm ring-1 ring-purple-500/20'
@@ -3071,7 +3152,7 @@ export default function ModelComparisonPage({
               )}
             </div>
 
-            {/* ── Thermocline Specialist Suite Deep-Dive ── */}
+            {/* ── Selected Category Model Deep-Dive ── */}
             <div className="bg-white text-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-md">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
                 <div>
@@ -3086,7 +3167,13 @@ export default function ModelComparisonPage({
 
                   <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
                     <Thermometer size={22} className="text-purple-600" />
-                    Thermocline Specialist Architecture Suite
+                      
+                  {CATEGORY_DEFINITIONS[
+                    inspectedFolderItem?.categoryKey ??
+                      (selectedDomainCategory === 'all'
+                        ? 'oceansubsurface'
+                        : selectedDomainCategory)
+                  ]?.label ?? 'Ocean'} Architecture Suite
                   </h3>
 
                   <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1.5 max-w-3xl leading-relaxed">
@@ -3115,7 +3202,11 @@ export default function ModelComparisonPage({
 
               {/* 6 Specialist Models Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {OCEAN_EMBEDDINGS_DATA.filter(item => item.categoryKey === 'thermocline').map(model => {
+                {OCEAN_EMBEDDINGS_DATA.filter(
+                                item =>
+                                  item.categoryKey ===
+                                  (inspectedFolderItem?.categoryKey ?? selectedDomainCategory)
+                              ).map(model => {
                   const isSelected = inspectedFolderItem?.id === model.id;
                   return (
                     <div
@@ -3191,7 +3282,7 @@ export default function ModelComparisonPage({
                       <th className="px-4 py-3 text-left font-mono font-black text-slate-900 uppercase">Path</th>
                       <th className="px-3 py-3 text-center font-mono font-black text-slate-900 uppercase">Files</th>
                       <th className="px-3 py-3 text-center font-mono font-black text-slate-900 uppercase">Coords (X, Y)</th>
-                      <th className="px-3 py-3 text-center font-mono font-black text-slate-900 uppercase">Action</th>
+                      
                     </tr>
                   </thead>
                   <tbody>
