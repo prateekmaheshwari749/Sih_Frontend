@@ -2014,10 +2014,12 @@ const currentStep: SevenDayForecastStep = useMemo(() => {
                           attribution="&copy; Esri &amp; NOAA"
                         />
                       ) : (
-                        <TileLayer
-                          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                          attribution="&copy; CARTO &amp; OSM"
-                        />
+                        
+                          <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            maxZoom={19}
+                          />
                       )}
 
                       {/* ── NIO Domain Border & 1°×1° Spatial Grid (like Map Page) ── */}

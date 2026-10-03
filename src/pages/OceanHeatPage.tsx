@@ -912,7 +912,7 @@ export default function OceanHeatPage({ embedded = false }: { embedded?: boolean
                 >
                   <TileLayer
                     attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     maxZoom={19}
                   />
                   <OceanDiagnosticHeatOverlay mapData={diagnosticMap} opacity={0.52} />
