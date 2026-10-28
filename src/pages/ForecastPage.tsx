@@ -49,84 +49,40 @@ import {
   getBackendUrl,
 } from '../api/oceanApi';
 
-// ─────────────────────────────────────────────────────────────────────────────
-const MODEL_DATASET_END = '2025-12-31';
-const MODEL_REFERENCE_YEAR = 2025;
-
-function getDynamicReferenceDate(customDateStr?: string): Date {
-  if (customDateStr) {
-    const parsed = parseISO(customDateStr);
-
-    if (!isNaN(parsed.getTime())) {
-      const requestedYear = parsed.getFullYear();
-
-      // Manual dates inside the real model dataset are kept unchanged.
-      if (
-        requestedYear >= 2018 &&
-        requestedYear <= MODEL_REFERENCE_YEAR
-      ) {
-        return new Date(
-          requestedYear,
-          parsed.getMonth(),
-          parsed.getDate(),
-        );
-      }
-
-      // If a future date such as 2026-09-17 is supplied, keep the
-      // real-world month/day but map it to the model's 2025 calendar.
-      return new Date(
-        MODEL_REFERENCE_YEAR,
-        parsed.getMonth(),
-        parsed.getDate(),
-      );
-    }
-  }
-
-  // IMPORTANT:
-  // The model dataset ends on 2025-12-31.
-  // "Today" therefore means today's month/day in the 2025 model year.
-  // Example: system date 2026-09-17 -> model date 2025-09-17.
-  const today = new Date();
-
-  return new Date(
-    MODEL_REFERENCE_YEAR,
-    today.getMonth(),
-    today.getDate(),
-  );
-}
-
-/**
- * 6 Historical Input Days: 6 days preceding the reference date (Target - 6 to Target - 1)
- * Example for reference date 2025-09-15:
- * [2025-09-09, 2025-09-10, 2025-09-11, 2025-09-12, 2025-09-13, 2025-09-14]
- */
-function getRollingWindowDates(referenceDate: Date): string[] {
-  return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(referenceDate);
-    d.setDate(referenceDate.getDate() - (6 - i));
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  });
-}
-
-/**
- * 7th Day: Prediction Target Date (Reference Date)
- * Example for reference date 2025-09-15:
- * 2025-09-15
- */
-function getPredictedNextDay(referenceDate: Date): string {
-  const d = new Date(referenceDate);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
+// Date helpers. The backend availability endpoint is the source of truth for the latest date.
+function formatDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function getDynamicReferenceDate(customDateStr?: string): Date {
+  const candidate = customDateStr ?? formatDate(new Date());
+  const parsed = parseISO(candidate);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid forecast date: ${candidate}`);
+  }
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+/** The backend's production model takes N input days immediately before target D. */
+function getRollingWindowDates(referenceDate: Date, windowDays = 7): string[] {
+  return Array.from({ length: windowDays }, (_, index) => {
+    const date = new Date(referenceDate);
+    date.setDate(referenceDate.getDate() - (windowDays - index));
+    return formatDate(date);
+  });
+}
+
+/** The saved model artifact is named for its target date D. */
+function getPredictionTargetDate(referenceDate: Date): string {
+  return formatDate(referenceDate);
+}
+
 const DEFAULT_REFERENCE_DATE = getDynamicReferenceDate();
-const DEFAULT_ROLLING_DATES = getRollingWindowDates(DEFAULT_REFERENCE_DATE);
-const DEFAULT_PREDICTED_DATE = getPredictedNextDay(DEFAULT_REFERENCE_DATE);
+const DEFAULT_ROLLING_DATES = getRollingWindowDates(DEFAULT_REFERENCE_DATE, 7);
+const DEFAULT_PREDICTED_DATE = getPredictionTargetDate(DEFAULT_REFERENCE_DATE);
 
 const DEFAULT_DEPTHS = [
   0,
@@ -376,7 +332,15 @@ export default function ForecastPage() {
   ] = useState<string>(
     DEFAULT_PREDICTED_DATE,
   );
+const [latestObservationDate, setLatestObservationDate] =
+  useState('');
 
+const [latestModelOutputDate, setLatestModelOutputDate] =
+  useState('');
+
+// Used to detect when the backend generates a newer output.
+const latestModelOutputDateRef = useRef('');
+  const [inputWindowDays, setInputWindowDays] = useState(7);
   const [
     referenceDateStr,
     setReferenceDateStr,
@@ -400,12 +364,12 @@ export default function ForecastPage() {
     setDays,
   ] = useState<ForecastDay[]>([]);
 
-  // Default to index 6 (the predicted day D+1). The surface attached to
-  // that step is the latest historical input D, not a prediction.
+  // The final index is the saved forecast target D. Its surface reference is
+  // the last historical input only; the target variables come from model output.
   const [
     selectedDay,
     setSelectedDay,
-  ] = useState(6);
+  ] = useState(7);
 
   const [
     selectedDepth,
@@ -457,227 +421,223 @@ export default function ForecastPage() {
       setLoading(true);
       setError(null);
 
-      console.log(
-        '[ForecastPage] Loading 2025 model-date forecast pipeline data...',
+      const metadata = await fetchHeatmapAvailable();
+      const availability = metadata as unknown as {
+        input_window_days?: number;
+        depths_m?: number[];
+        available_dates?: string[];
+        latest_observation_date?: string | null;
+        latest_model_output_date?: string | null;
+        live_availability?: {
+          surface?: { dates?: string[]; latest_date?: string | null };
+          subsurface_temperature?: { dates?: string[]; latest_date?: string | null };
+        };
+      };
+
+      const surfaceDates = (availability.live_availability?.surface?.dates ?? [])
+        .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
+        .sort();
+      const outputDates = [
+        ...new Set(
+          (availability.live_availability?.subsurface_temperature?.dates ??
+            availability.available_dates ?? [])
+            .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)),
+        ),
+      ].sort();
+
+      const latestOutput =
+        availability.latest_model_output_date ??
+        availability.live_availability?.subsurface_temperature?.latest_date ??
+        outputDates[outputDates.length - 1] ??
+        null;
+      const latestObservation =
+        availability.latest_observation_date ??
+        availability.live_availability?.surface?.latest_date ??
+        null;
+
+      if (!latestOutput) {
+        throw new Error(
+          'The backend did not report any completed model-output dates.',
+        );
+      }
+
+      setLatestObservationDate(latestObservation ?? 'Unavailable');
+      setLatestModelOutputDate(latestOutput);
+      latestModelOutputDateRef.current = latestOutput;
+
+      const windowDays = Math.max(
+        1,
+        Math.floor(availability.input_window_days ?? 7),
       );
+      setInputWindowDays(windowDays);
 
-      // Dynamically anchored to today's month/day in the 2025 model year
-      const refDate = getDynamicReferenceDate(customStartDate);
-      const yyyy = refDate.getFullYear();
-      const mm = String(refDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(refDate.getDate()).padStart(2, '0');
-      const formattedRefStr = `${yyyy}-${mm}-${dd}`;
+      // The selected date is a model-output/forecast target date D, not the last input day.
+      const requestedDate = (customStartDate || latestOutput).slice(0, 10);
+      let targetDate = requestedDate;
 
-      // Rolling window: exactly 6 historical dates before the model target date.
-      const rolling = getRollingWindowDates(refDate);
-      const nextDayPred = getPredictedNextDay(refDate);
+      if (targetDate.startsWith('2026-')) {
+        // Never request a target beyond the newest saved output. If the selected
+        // target is missing, step back to the newest output with valid input files.
+        const candidates = (outputDates.length ? outputDates : [latestOutput])
+          .filter(date => date <= targetDate)
+          .reverse();
+        const surfaceDateSet = new Set(surfaceDates);
+        const validTarget = candidates.find(candidate => {
+          const candidateDate = parseISO(candidate);
+          if (Number.isNaN(candidateDate.getTime())) return false;
+          const inputs = getRollingWindowDates(candidateDate, windowDays);
+          return inputs.every(date =>
+            !date.startsWith('2026-') || surfaceDateSet.has(date),
+          );
+        });
+
+        if (!validTarget) {
+          throw new Error(
+            `No saved model output has a complete ${windowDays}-day input window on or before ${requestedDate}.`,
+          );
+        }
+        targetDate = validTarget;
+      } else if (targetDate > latestOutput) {
+        targetDate = latestOutput;
+      }
+
+      const targetDateObject = getDynamicReferenceDate(targetDate);
+      const formattedRefStr = formatDate(targetDateObject);
+      const rolling = getRollingWindowDates(targetDateObject, windowDays);
+      const predictionTargetDate = getPredictionTargetDate(targetDateObject);
 
       setReferenceDateStr(formattedRefStr);
       setRollingDates(rolling);
-      setPredictedDate(nextDayPred);
+      setPredictedDate(predictionTargetDate);
 
-      let backendDepths =
-        DEFAULT_DEPTHS;
-
-      // Try reading depths from backend heatmap metadata
-      try {
-        const metadata =
-          await fetchHeatmapAvailable();
-
-        const metadataAny =
-          metadata as unknown as {
-            depth_levels?: number[];
-            depths_m?: number[];
-          };
-
-        const availableDepths =
-          metadataAny.depth_levels ??
-          metadataAny.depths_m;
-
-        if (
-          Array.isArray(availableDepths) &&
-          availableDepths.length
-        ) {
-          backendDepths =
-            availableDepths;
-        }
-      } catch (metadataError) {
-        console.warn(
-          '[ForecastPage] Heatmap metadata unavailable. Using default depth layers.',
-          metadataError,
-        );
-      }
-
-      setDepths(
-        backendDepths,
+      const backendDepths =
+        Array.isArray(availability.depths_m) && availability.depths_m.length
+          ? availability.depths_m
+          : DEFAULT_DEPTHS;
+      setDepths(backendDepths);
+      setSelectedDepth(currentDepth =>
+        backendDepths.includes(currentDepth)
+          ? currentDepth
+          : backendDepths[Math.floor(backendDepths.length / 2)] ?? 100,
       );
 
-      setSelectedDepth(
-        currentDepth => {
-          if (
-            backendDepths.includes(
-              currentDepth,
-            )
-          ) {
-            return currentDepth;
+      console.log('[ForecastPage] Availability:', {
+        latestObservation,
+        latestOutput,
+        selectedTarget: formattedRefStr,
+        inputWindowDays: windowDays,
+        inputDates: rolling,
+        predictionTarget: predictionTargetDate,
+      });
+
+      // Request only real historical input dates. The target is loaded from the
+      // saved model output via the profile/heatmap endpoints, not /api/surface.
+      const loadedSurfaces = await Promise.all(
+        rolling.map(async date => {
+          const surface = await fetchSurface(date);
+          if (!surface || !surface.variables) {
+            throw new Error(`Backend returned no surface variables for ${date}.`);
           }
-
-          return (
-            backendDepths[
-              Math.floor(
-                backendDepths.length /
-                  2,
-              )
-            ] ?? 100
-          );
-        },
+          return { date, surface: surface as SurfaceData };
+        }),
       );
 
-      // The production backend interprets its heatmap/profile date as D,
-      // builds D-6 ... D, and returns the prediction for D+1.
-      // Therefore the six visible input cards are D-6 ... D-1 and the
-      // seventh card represents the prediction target D+1.
-      // Surface telemetry is loaded only for the real input dates.
-      const modelInputDates = [
-        ...rolling,
-        formattedRefStr,
-      ];
-
-      console.log(
-        '[ForecastPage] Loading real 7-day model input window:',
-        modelInputDates,
-      );
-
-      const loadedSurfaces =
-        await Promise.all(
-          modelInputDates.map(
-            async date => {
-              const surface =
-                await fetchSurface(date);
-
-              if (!surface || !surface.variables) {
-                throw new Error(
-                  `Backend returned no surface variables for ${date}.`,
-                );
-              }
-
-              return {
-                date,
-                surface: surface as SurfaceData,
-              };
-            },
-          ),
-        );
-
-      const inputDays: ForecastDay[] =
-        loadedSurfaces.map(item => ({
-          date: item.date,
-          surfaceDate: item.date,
-          surface: item.surface,
-          isPrediction: false,
-        }));
-
-      const latestInput =
-        inputDays[inputDays.length - 1];
+      const inputDays: ForecastDay[] = loadedSurfaces.map(item => ({
+        date: item.date,
+        surfaceDate: item.date,
+        surface: item.surface,
+        isPrediction: false,
+      }));
+      const latestInput = inputDays[inputDays.length - 1];
 
       if (!latestInput) {
-        throw new Error(
-          'Backend returned no final input day for model inference.',
-        );
+        throw new Error('Backend returned no final input day for model inference.');
       }
 
       const backendDays: ForecastDay[] = [
-        ...inputDays.slice(0, 6),
+        ...inputDays,
         {
-          date: nextDayPred,
-          surfaceDate: formattedRefStr,
+          date: predictionTargetDate,
+          surfaceDate: latestInput.date,
+          // The target only has subsurface temperature output. Keep this reference
+          // for input provenance; do not label its surface variables as target observations.
           surface: latestInput.surface,
           isPrediction: true,
         },
       ];
 
-      console.log(
-        '[ForecastPage] Real 6-day historical context + 7th-day model target prepared:',
-        {
-          input_window: modelInputDates,
-          forecast_date: nextDayPred,
-        },
-      );
-
       setDays(backendDays);
-
-      // Force the browser to request a fresh model-generated heatmap
-      // after each successful backend load.
-      setHeatmapRefreshKey(
-        Date.now(),
-      );
-
-      // Focus default selection on the Predicted Day (index 6)
-      setSelectedDay(6);
-
+      setHeatmapRefreshKey(Date.now());
+      setSelectedDay(windowDays);
     } catch (err) {
-      console.error(
-        '[ForecastPage] Real backend forecast loading failed:',
-        err,
-      );
-
+      console.error('[ForecastPage] Live forecast loading failed:', err);
       setDays([]);
       setProfileData([]);
       setError(
         err instanceof Error
           ? err.message
-          : 'Failed to load real backend forecast data.',
+          : 'Failed to load the live forecast data.',
       );
     } finally {
       setLoading(false);
     }
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Automatic refresh & real-world calendar day rollover detector
-  // ───────────────────────────────────────────────────────────────────────────
+  // Refresh only when the backend reports a newer completed output.
   useEffect(() => {
-    loadBackendData();
+    void loadBackendData();
 
-    const getCalendarDayKey = () => {
-      const now = new Date();
+    const checkForNewOutput = async () => {
+      try {
+        const metadata = await fetchHeatmapAvailable();
+        const availability = metadata as unknown as {
+          latest_observation_date?: string | null;
+          latest_model_output_date?: string | null;
+          available_dates?: string[];
+          live_availability?: {
+            surface?: { latest_date?: string | null };
+            subsurface_temperature?: {
+              dates?: string[];
+              latest_date?: string | null;
+            };
+          };
+        };
+        const observedThrough =
+          availability.latest_observation_date ??
+          availability.live_availability?.surface?.latest_date;
+        if (observedThrough) setLatestObservationDate(observedThrough);
+        const outputDates = (
+          availability.live_availability?.subsurface_temperature?.dates ??
+          availability.available_dates ?? []
+        ).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
+        const newest =
+          availability.latest_model_output_date ??
+          availability.live_availability?.subsurface_temperature?.latest_date ??
+          outputDates[outputDates.length - 1] ??
+          '';
 
-      // The UI follows the real current month/day but always uses
-      // the model's available reference year: 2025.
-      return `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    };
-
-    let lastLoadedDay = getCalendarDayKey();
-
-    const refreshIfCalendarDayChanged = () => {
-      const currentDay = getCalendarDayKey();
-
-      if (currentDay !== lastLoadedDay) {
-        lastLoadedDay = currentDay;
-        console.log(
-          '[ForecastPage] Calendar day changed. Automatically loading the new 6-day input window + 7th-day target:',
-          currentDay,
-        );
-        loadBackendData();
+        if (newest && newest !== latestModelOutputDateRef.current) {
+          console.log('[ForecastPage] New completed model output detected:', newest);
+          await loadBackendData();
+        }
+      } catch (availabilityError) {
+        console.warn('[ForecastPage] Availability check failed:', availabilityError);
       }
     };
 
-    // Check frequently enough to catch midnight even if the page stays open.
-    const intervalId = setInterval(refreshIfCalendarDayChanged, 30000);
-
-    const handleFocusOrVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        refreshIfCalendarDayChanged();
-      }
+    const intervalId = window.setInterval(() => {
+      void checkForNewOutput();
+    }, 60_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void checkForNewOutput();
     };
 
-    window.addEventListener('focus', handleFocusOrVisibility);
-    document.addEventListener('visibilitychange', handleFocusOrVisibility);
-
+    window.addEventListener('focus', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      clearInterval(intervalId);
-      window.removeEventListener('focus', handleFocusOrVisibility);
-      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -1068,12 +1028,12 @@ const profileLongitude = 81.0;
           badge={
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border-2 border-cyan-400 text-cyan-200 text-xs font-mono font-bold shadow-md">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              6 HISTORICAL INPUT DAYS → 7TH DAY PREDICTION
+              {inputWindowDays} HISTORICAL INPUT DAYS → FORECAST TARGET
             </div>
           }
           icon={<Calendar size={18} className="text-cyan-400" />}
           title="7-Day Subsurface Temperature Forecast"
-          subtitle={`ConvGRU Neural Prognostic Architecture · 6 Historical Input Days (${rollingDates[0]} → ${referenceDateStr}) · 7th Day Target Prediction: ${predictedDate}`}
+          subtitle={`CNN + Swin + ConvGRU · ${inputWindowDays} historical input days (${rollingDates[0]} → ${rollingDates[rollingDates.length - 1]}) · forecast target: ${predictedDate}`}
           actions={
             <div className="flex items-center gap-2">
 
@@ -1081,6 +1041,17 @@ const profileLongitude = 81.0;
             </div>
           }
         />
+
+        {/* Live-data availability note */}
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+          <h3 className="font-bold text-sm">Live Data Availability</h3>
+          <p className="mt-1 text-sm leading-6">
+            Surface observations are available through <strong>{latestObservationDate || 'checking availability'}</strong>.
+            Saved subsurface-temperature model outputs are available through <strong>{latestModelOutputDate || 'checking availability'}</strong>.
+            This page loads the latest completed target by default and uses the backend-reported {inputWindowDays}-day input window before that target.
+            Dates after the latest available output are not treated as observed data or shown as completed predictions. Marine heatwave and seasonal products are shown only where their outputs exist; cyclone predictions are currently unavailable.
+          </p>
+        </div>
 
         {/* Backend status */}
         <div className="bg-white rounded-2xl p-4 border border-slate-200 mb-6 shadow-sm">
@@ -1101,10 +1072,17 @@ const profileLongitude = 81.0;
               <p className="text-xs text-slate-500 mt-1 font-mono">
                 {getBackendUrl()}
               </p>
+              <p className="text-xs text-slate-600 mt-2">
+                Saved model output: <span className="font-mono font-semibold text-[#005088] break-all">
+                  {predictedDate.startsWith('2026-')
+                    ? `data/live_2026/outputs/temperature/${predictedDate}/subsurface_temperature_15depth.pt`
+                    : `Historical model inference for ${predictedDate}`}
+                </span>
+              </p>
             </div>
 
             <button
-              onClick={() => loadBackendData(referenceDateStr)}
+              onClick={() => loadBackendData()}
               className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:text-[#005088] hover:bg-slate-50 transition cursor-pointer bg-white shadow-sm"
             >
               <RefreshCw size={14} />
@@ -1118,15 +1096,15 @@ const profileLongitude = 81.0;
           {[
             {
               label: 'Historical Window',
-              value: '6 Days (Input Context)',
+              value: `${inputWindowDays} Days (Input Context)`,
             },
             {
               label: 'Model Prediction',
-              value: '7th Day (Target)',
+              value: 'Forecast Target',
             },
             {
               label: 'Last Input Date',
-              value: referenceDateStr,
+              value: rollingDates[rollingDates.length - 1] ?? '—',
             },
             {
               label: 'Prediction Output',
@@ -1170,14 +1148,14 @@ const profileLongitude = 81.0;
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-black text-slate-900 uppercase tracking-wider">
-                    6 Historical Input Days
+                    {inputWindowDays} Historical Input Days
                   </h3>
                   <span className="text-[11px] font-mono font-black px-2.5 py-0.5 rounded-full bg-blue-50 text-[#005088] border border-blue-200 shadow-sm">
                     MODEL INPUT CONTEXT
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                  Sequential multi-modal satellite observations ingested into ConvGRU recurrent memory cells
+                  Sequential ocean observations supplied to the production model input window
                 </p>
               </div>
             </div>
@@ -1191,7 +1169,7 @@ const profileLongitude = 81.0;
                 <input
                   type="date"
                   min="2018-01-07"
-                  max={MODEL_DATASET_END}
+                  max={latestModelOutputDate || undefined}
                   value={referenceDateStr}
                   onChange={(e) => {
                     if (e.target.value) {
@@ -1206,8 +1184,8 @@ const profileLongitude = 81.0;
             </div>
           </div>
 
-          {/* 6 Historical Input Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          {/* Historical input cards reported by the backend */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3.5">
             {rollingDates.map((dateStr, idx) => {
               const isSelected = safeSelectedDay === idx;
               const dayObj = days[idx];
@@ -1255,14 +1233,14 @@ const profileLongitude = 81.0;
         {/* ── VISUAL PIPELINE BRIDGE (MODEL CONVGRU) ──────────────── */}
         <div className="flex items-center justify-center my-3">
           <div className="flex items-center gap-3 px-5 py-2 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-mono text-slate-700">
-            <span className="font-bold text-slate-700">6 Input Days ({rollingDates[0]} → {rollingDates[5]})</span>
+            <span className="font-bold text-slate-700">{inputWindowDays} Input Days ({rollingDates[0]} → {rollingDates[rollingDates.length - 1]})</span>
             <ArrowRight size={14} className="text-cyan-400 animate-pulse" />
             <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-md bg-blue-50 border border-blue-200 font-black text-[#005088]">
               <Cpu size={13} className="text-cyan-400" />
               ConvGRU Prognostic Model
             </div>
             <ArrowRight size={14} className="text-cyan-400 animate-pulse" />
-            <span className="font-bold text-[#005088]">7th Day Prediction ({predictedDate})</span>
+            <span className="font-bold text-[#005088]">Forecast Target ({predictedDate})</span>
           </div>
         </div>
 
@@ -1276,14 +1254,14 @@ const profileLongitude = 81.0;
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-black text-slate-900 uppercase tracking-wider">
-                    7th Day Prediction Output
+                    Model Prediction Output
                   </h2>
                   <span className="text-[11px] font-mono font-black px-3 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#005088] shadow-sm">
                     PREDICTED
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 mt-0.5 font-medium">
-                  Deep ConvGRU spatio-temporal projection computed directly from the 6-day historical sequence
+                  Deep ConvGRU spatio-temporal projection using the backend-reported {inputWindowDays}-day input window
                 </p>
               </div>
             </div>
@@ -1295,11 +1273,11 @@ const profileLongitude = 81.0;
           </div>
 
           {/* Single Prediction Target Card */}
-          {days[6] && (
+          {days[inputWindowDays] && (
             <div
-              onClick={() => setSelectedDay(6)}
+              onClick={() => setSelectedDay(inputWindowDays)}
               className={`p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                safeSelectedDay === 6
+                safeSelectedDay === inputWindowDays
                   ? 'border-cyan-300 bg-white shadow-[0_6px_24px_rgba(14,165,233,0.12)]'
                   : 'border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50/30 shadow-sm'
               }`}
@@ -1307,7 +1285,7 @@ const profileLongitude = 81.0;
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-cyan-50 border border-cyan-200 text-[#005088] flex flex-col items-center justify-center shadow-sm">
-                    <span className="text-[10px] font-mono text-[#005088] font-bold uppercase">DAY 7</span>
+                    <span className="text-[10px] font-mono text-[#005088] font-bold uppercase">OUTPUT</span>
                     <span className="text-xs font-black text-[#005088]">TARGET</span>
                   </div>
 
@@ -1335,18 +1313,18 @@ const profileLongitude = 81.0;
                   </div>
 
                   <div className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <span className="text-slate-600 block text-[10px] font-bold uppercase">Target SSH (Observed)</span>
+                    <span className="text-slate-600 block text-[10px] font-bold uppercase">Last Input SSH (Observed)</span>
                     <span className="text-emerald-700 font-black text-base">
-                      {averageGrid(days[6]?.surface?.variables?.ssh).toFixed(1)} cm
+                      {averageGrid(days[inputWindowDays - 1]?.surface?.variables?.ssh).toFixed(1)} cm
                     </span>
                   </div>
 
                   <div className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <span className="text-slate-600 block text-[10px] font-bold uppercase">Target Wind (Observed)</span>
+                    <span className="text-slate-600 block text-[10px] font-bold uppercase">Last Input Wind (Observed)</span>
                     <span className="text-amber-700 font-black text-base">
                       {vectorMagnitude(
-                        averageGrid(days[6]?.surface?.variables?.u_wind),
-                        averageGrid(days[6]?.surface?.variables?.v_wind)
+                        averageGrid(days[inputWindowDays - 1]?.surface?.variables?.u_wind),
+                        averageGrid(days[inputWindowDays - 1]?.surface?.variables?.v_wind)
                       ).toFixed(1)} m/s
                     </span>
                   </div>
@@ -1367,7 +1345,7 @@ const profileLongitude = 81.0;
                   Model-Generated Temperature Heatmap
                 </h2>
                 <p className="text-xs text-slate-600 font-medium">
-                  {safeSelectedDay === 6 ? `Predicted Target Day (Day 7) · ${predictedDate}` : `Historical Input Day (Day ${safeSelectedDay + 1}) · ${activeDay?.date ?? ''}`}
+                  {safeSelectedDay === inputWindowDays ? `Forecast Target · ${predictedDate}` : `Historical Input Day (Day ${safeSelectedDay + 1}) · ${activeDay?.date ?? ''}`}
                 </p>
               </div>
 
@@ -1420,7 +1398,7 @@ const profileLongitude = 81.0;
             </div>
 
             <div className="flex justify-between mt-3 text-xs text-slate-600 font-mono font-semibold">
-              <span className="text-[#005088] font-bold">{safeSelectedDay === 6 ? predictedDate : activeDay.date}</span>
+              <span className="text-[#005088] font-bold">{safeSelectedDay === inputWindowDays ? predictedDate : activeDay.date}</span>
               <span>{selectedDepth} m</span>
               <span className="text-emerald-700">ConvGRU Model</span>
             </div>
@@ -1433,7 +1411,7 @@ const profileLongitude = 81.0;
               Model Depth Profile (0–1000m)
             </h2>
             <p className="text-xs text-slate-600 mb-1 font-medium">
-              Thermal reconstruction for {safeSelectedDay === 6 ? predictedDate : `${activeDay.date} → next-day model forecast`}
+              Thermal reconstruction for {safeSelectedDay === inputWindowDays ? predictedDate : activeDay.date}
             </p>
             <p className="text-[11px] text-slate-500 mb-4 font-mono">
               Representative ocean grid point: {profileLatitude.toFixed(2)}°N, {profileLongitude.toFixed(2)}°E
@@ -1596,7 +1574,7 @@ const profileLongitude = 81.0;
               SST / SSH Spatio-Temporal Evolution
             </h3>
             <p className="text-xs text-slate-600 mb-4 font-medium">
-              6-Day input sequence leading into the 7th-day target projection
+              {inputWindowDays}-day input sequence leading into the saved forecast target
             </p>
 
             <ResponsiveContainer width="100%" height={220}>
@@ -1679,14 +1657,14 @@ const profileLongitude = 81.0;
           </div>
         </div>
 
-        {/* 6-day input & 1-day prediction heatmap thumbnails */}
+        {/* Historical input & prediction-target heatmap thumbnails */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 mb-6 shadow-sm">
           <h2 className="font-bold text-slate-900 flex items-center gap-2 mb-1">
             <Layers size={16} className="text-cyan-400" />
-            Sequential Model Heatmap Snapshots (6 Input Days + 1 Predicted Day)
+            Sequential Model Heatmap Snapshots ({inputWindowDays} Input Days + 1 Prediction Target)
           </h2>
           <p className="text-xs text-slate-600 mb-5 font-medium">
-            2D horizontal thermal slice at depth {selectedDepth} m across the 7-day sequence
+            2D horizontal thermal slice at depth {selectedDepth} m across the input window and target
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -1724,7 +1702,7 @@ const profileLongitude = 81.0;
 
                   <div className="px-2.5 py-2 bg-white border-t border-slate-200 text-left">
                     <p className={`text-[10px] font-mono font-bold ${isPred ? 'text-[#005088]' : 'text-slate-600'}`}>
-                      {isPred ? 'PREDICTED (Day 7)' : `INPUT (Day ${index + 1})`}
+                      {isPred ? 'PREDICTED TARGET' : `INPUT (Day ${index + 1})`}
                     </p>
                     <p className="text-xs text-slate-900 font-bold font-mono">
                       {format(parseISO(day.date), 'MMM dd')}
@@ -1757,7 +1735,7 @@ const profileLongitude = 81.0;
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
             <h3 className="font-bold text-white flex items-center gap-2">
               <Calendar size={16} className="text-cyan-400" />
-              6-Day Context &amp; 1-Day Forecast Telemetry Summary
+              Input Window &amp; Forecast Target Telemetry Summary
             </h3>
             <p className="text-xs text-slate-200 mt-1 font-medium">
               Multi-parameter oceanic observation variables and 24-hour neural forecast
@@ -1784,18 +1762,18 @@ const profileLongitude = 81.0;
               <tbody>
                 {days.map((day, index) => {
                   const surface = day.surface;
-                  const sst = averageGrid(surface?.variables?.sst);
-                  const sss = averageGrid(surface?.variables?.sss);
-                  const ssh = averageGrid(surface?.variables?.ssh);
-                  const wind = vectorMagnitude(
+                  const sst = day.isPrediction ? Number.NaN : averageGrid(surface?.variables?.sst);
+                  const sss = day.isPrediction ? Number.NaN : averageGrid(surface?.variables?.sss);
+                  const ssh = day.isPrediction ? Number.NaN : averageGrid(surface?.variables?.ssh);
+                  const wind = day.isPrediction ? Number.NaN : vectorMagnitude(
                     averageGrid(surface?.variables?.u_wind),
                     averageGrid(surface?.variables?.v_wind)
                   );
-                  const current = vectorMagnitude(
+                  const current = day.isPrediction ? Number.NaN : vectorMagnitude(
                     averageGrid(surface?.variables?.current_u),
                     averageGrid(surface?.variables?.current_v)
                   );
-                  const isPred = index === 6;
+                  const isPred = index === inputWindowDays;
 
                   return (
                     <tr
@@ -1812,7 +1790,7 @@ const profileLongitude = 81.0;
                       <td className="px-4 py-3 font-mono font-bold whitespace-nowrap">
                         {isPred ? (
                           <span className="text-[#005088] font-black px-2 py-0.5 rounded bg-blue-50 border border-blue-200">
-                            ★ PREDICTED (Day 7)
+                            ★ PREDICTED TARGET
                           </span>
                         ) : (
                           <span className="text-slate-700 font-semibold px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
