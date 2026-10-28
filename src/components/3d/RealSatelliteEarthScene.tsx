@@ -741,10 +741,11 @@ export default function RealSatelliteEarthScene({
   }, [activeMissionId]);
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-[#01050e]">
+    <div className="w-full h-full relative overflow-hidden bg-[#01050e]" style={{ touchAction: 'none' }}>
       <Canvas
         camera={{ position: [0, 1.8, 5.2], fov: 45 }}
         gl={{ antialias: true, alpha: true }}
+        dpr={[1, 1.75]}
       >
         {/* Deep Space Starfield */}
         <Stars radius={100} depth={50} count={2400} factor={4} saturation={0.5} fade speed={1} />
@@ -775,19 +776,25 @@ export default function RealSatelliteEarthScene({
 
         {/* Interactive Camera Orbit Controls */}
         <OrbitControls
-          enableZoom={true}
-          minDistance={3.2}
-          maxDistance={8.5}
+          makeDefault
+          enableRotate
+          enableZoom
           enablePan={false}
-          rotateSpeed={0.5}
+          enableDamping
           dampingFactor={0.08}
+          rotateSpeed={0.65}
+          zoomSpeed={0.8}
+          minDistance={3.6}
+          maxDistance={7.5}
+          minPolarAngle={0.15}
+          maxPolarAngle={Math.PI - 0.15}
         />
       </Canvas>
 
       {/* Floating 3D Navigation Hint */}
-      <div className="absolute bottom-3 left-3 pointer-events-none z-10 flex items-center gap-2 px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 text-[10px] font-mono text-white/50 backdrop-blur-md">
+      <div className="absolute bottom-3 left-3 pointer-events-none z-10 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-950/75 border border-white/15 text-[10px] font-mono text-white/75 backdrop-blur-md">
         <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-        <span>3D Scene: Drag to orbit Earth · Scroll to zoom</span>
+        <span>Drag to rotate · Scroll or pinch to zoom</span>
       </div>
     </div>
   );

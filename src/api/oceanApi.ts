@@ -36,52 +36,37 @@ const getBase = () => getBackendUrl()
 // Dataset date range
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DATASET_START =
-  '2018-01-01'
+// const DATASET_START =
+//   '2018-01-01'
 
-const DATASET_END =
-  '2026-09-18'
+// const DATASET_END =
+//   '2026-10-22'
 
-const DEFAULT_DATE =
-  '2026-09-18'
+// const DEFAULT_DATE =
+//   '2026-10-22'
 
 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Date helper
 // ─────────────────────────────────────────────────────────────────────────────
+const DATASET_START = '2018-01-01';
 
-function clampDate(
-  date: string,
-): string {
-  if (
-    !date ||
-    date.length < 10
-  ) {
-    return DEFAULT_DATE
+function clampDate(date: string): string {
+  const safeDate = (date ?? '').slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(safeDate)) {
+    throw new Error(`Invalid date: ${date}`);
   }
 
-  const safeDate =
-    date.slice(0, 10)
-
-  if (
-    safeDate <
-    DATASET_START
-  ) {
-    return DATASET_START
+  if (safeDate < DATASET_START) {
+    throw new Error(`Date is outside the supported range: ${safeDate}`);
   }
 
-  if (
-    safeDate >
-    DATASET_END
-  ) {
-    return DATASET_END
-  }
-
-  return safeDate
+  // Do not cap to a hardcoded October 22. ForecastPage validates the date
+  // against the current live availability returned by FastAPI.
+  return safeDate;
 }
-
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Depth helper
@@ -443,13 +428,29 @@ export interface HealthResponse {
 }
 
 
+export interface LiveDateAvailability {
+  available?: boolean;
+  count?: number;
+  dates?: string[];
+  latest_date?: string | null;
+  months?: string[];
+  latest_month?: string | null;
+}
 export interface HeatmapAvailableResponse {
-  depths_m: number[]
-  input_window_days: number
-  input_shape: number[]
-  output_shape: number[]
-  variables: string[]
-  available_dates?: string[]
+  depths_m: number[];
+  input_window_days: number;
+  input_shape: number[];
+  output_shape: number[];
+  variables: string[];
+  available_dates?: string[];
+  latest_observation_date?: string | null;
+  latest_model_output_date?: string | null;
+  live_availability?: {
+    surface?: LiveDateAvailability;
+    subsurface_temperature?: LiveDateAvailability;
+    marine_heatwave?: LiveDateAvailability;
+    seasonal?: LiveDateAvailability;
+  };
 }
 
 
